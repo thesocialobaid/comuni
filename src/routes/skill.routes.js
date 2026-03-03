@@ -9,13 +9,13 @@
 
 
 const express = require('express');
-const router = express.router(); 
+const router = express.Router(); 
 const skillCtrl = require('../controllers/skill.controller');
 const { authenticate } = require('../middleware/auth');
 
 router.get('/', skillCtrl.listSkills);
 router.get('/categories', skillCtrl.listCategories);
-router.get('/:skillId', skillCtrl.getSkill);
+router.get('/:skillId', skillCtrl.getSkillById);
 
 //Creating skills requires login 
 router.post('/',authenticate, skillCtrl.createSkill);
