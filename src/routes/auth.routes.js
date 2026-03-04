@@ -17,7 +17,7 @@ const { uploadProfilePicture } = require('../middleware/upload');
 
 //Upload profile picture sits between the route and and the controller 
 // Think of it as a security guard that handles the file BEFORE the controller 
-
+    
 router.post('/register',uploadProfilePicture, authCtrl.register);
 router.post('/login',    authCtrl.login);
 router.get('/me',        authenticate, authCtrl.getMe);

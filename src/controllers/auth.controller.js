@@ -6,7 +6,7 @@ without the server starting session state. The token is signed with our
 JWT_SECRET so we can verify it hasn't been tampered with.
 */
 
-const bycrypt = require('bcrypt');
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken'); 
 const fs = require('fs');
 const path = require('path');
@@ -91,7 +91,7 @@ async function register(req, res, next) {
 
     // Hashing the password
     const rounds = parseInt(process.env.BCRYPT_ROUNDS) || 10;
-    const passwordHash = await bycrypt.hash(password, rounds);
+    const passwordHash = await bcrypt.hash(password, rounds);
 
     // Inserting the students 
     const [result] = await pool.query(
