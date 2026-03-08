@@ -1,7 +1,10 @@
 -- 24L-0698,24L-0650,24L-0509
 DROP DATABASE IF EXISTS communitask;
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 CREATE DATABASE IF NOT EXISTS communitask;
