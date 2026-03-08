@@ -47,15 +47,21 @@ async function register(req, res, next) {
       : null;
 
     // ── Basic validation ──────────────────────────────────────────────────
-    if (!rollNumber || !email || !password || !name) {
-      // If a file was uploaded but validation fails, delete it from disk
-      // so we don't accumulate orphan files
+    if (!rollNumber) {
       if (req.file) fs.unlinkSync(req.file.path);
-
-      return res.status(400).json({
-        success: false,
-        message: 'rollNumber, email, password, and name are required.',
-      });
+      return res.status(400).json({ success: false, message: 'rollNumber is required.' });
+    }
+    if (!email) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ success: false, message: 'email is required.' });
+    }
+    if (!password) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ success: false, message: 'password is required.' });
+    }
+    if (!name) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ success: false, message: 'name is required.' });
     }
 
     if (password.length < 6) {
