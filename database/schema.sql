@@ -1,8 +1,8 @@
 -- 24L-0698,24L-0650,24L-0509
-DROP DATABASE IF EXISTS dbproj;
+DROP DATABASE IF EXISTS communitask;
 
-CREATE DATABASE IF NOT EXISTS dbproj;
-use dbproj;
+CREATE DATABASE IF NOT EXISTS communitask;
+use communitask;
 
 CREATE TABLE Student (
     studentId        INT AUTO_INCREMENT PRIMARY KEY,

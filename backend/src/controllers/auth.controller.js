@@ -68,26 +68,75 @@ async function register(req, res, next) {
 
     const nuEmailRegex = /^[^\s@]+@([a-z0-9-]+\.)?nu\.edu\.pk$/i;
     if (!nuEmailRegex.test(email)) {
-        if (req.file) fs.unlinkSync(req.file.path);
-        return res.status(400).json({
-            success: false,
-            message: 'Email must be a valid NU email address (ending with @nu.edu.pk).',
-        });
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({
+        success: false,
+        message: 'Email must be a valid NU email address (ending with @nu.edu.pk).',
+      });
+    }
+
+    // ── Roll Number Format Validation ─────────────────────────────────────
+    const rollRegex = /^\d{2}[A-Z]-\d{4}$/;
+
+    if (!rollRegex.test(rollNumber)) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({
+        success: false,
+        message: "Roll number must be in format: 24L-0698",
+      });
+    }
+
+    // Extract parts from roll number
+    const rollMatch = rollNumber.match(/^(\d{2})([A-Z])-(\d{4})$/);
+
+    const batch = rollMatch[1];       // 24
+    const campusLetter = rollMatch[2]; // L
+    const rollDigits = rollMatch[3];   // 0698
+
+    // ── Email Format Validation ───────────────────────────────────────────
+    const emailRegex = /^([a-z])(\d{2})(\d{4})@([a-z]+)\.nu\.edu\.pk$/i;
+
+    const emailMatch = email.match(emailRegex);
+
+    if (!emailMatch) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({
+        success: false,
+        message: "Email must be a valid NU email (e.g. l240698@lhr.nu.edu.pk)",
+      });
+    }
+
+    // Extract parts from email
+    const emailCampusLetter = emailMatch[1].toUpperCase();
+    const emailBatch = emailMatch[2];
+    const emailRoll = emailMatch[3];
+
+    // ── Cross-check Roll Number with Email ─────────────────────────────────
+    if (
+      campusLetter !== emailCampusLetter ||
+      batch !== emailBatch ||
+      rollDigits !== emailRoll
+    ) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({
+        success: false,
+        message: "Email does not match the provided roll number.",
+      });
     }
 
     //Checking the uniqueness (before hashing to save CPU)
     const [existing] = await pool.query(
-        'SELECT studentId FROM Student WHERE email = ? OR rollNumber = ? LIMIT 1',
-        [email,rollNumber]
-    ); 
+      'SELECT studentId FROM Student WHERE email = ? OR rollNumber = ? LIMIT 1',
+      [email, rollNumber]
+    );
 
     if (existing.length > 0) {
-        if (req.file) fs.unlinkSync(req.file.path);
-        return res.status(400).json({
-            success: false,
-            message: 'A student with this email or roll number already exists.',
-        });
-    } 
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({
+        success: false,
+        message: 'A student with this email or roll number already exists.',
+      });
+    }
 
     // Hashing the password
     const rounds = parseInt(process.env.BCRYPT_ROUNDS) || 10;
@@ -95,9 +144,9 @@ async function register(req, res, next) {
 
     // Inserting the students 
     const [result] = await pool.query(
-        'INSERT INTO Student (rollNumber, email, passwordHash, name, profilePicture, bio) VALUES (?, ?, ?, ?, ?, ?)',
-        [rollNumber, email, passwordHash, name, bio || null, profilePicture]
-    ); 
+      'INSERT INTO Student (rollNumber, email, passwordHash, name, profilePicture, bio) VALUES (?, ?, ?, ?, ?, ?)',
+      [rollNumber, email, passwordHash, name, profilePicture, bio || null]
+    );
 
     const studentId = result.insertId;
 
@@ -116,15 +165,15 @@ async function register(req, res, next) {
     const token = generateToken(student);
 
     res.status(201).json({
-        success: true,
-        message: 'Registration successful.',
-        token,
-        student,
+      success: true,
+      message: 'Registration successful.',
+      token,
+      student,
     });
   } catch (err) {
     // If any DB error happens after file was saved, clean up the file
     if (req.file) {
-      try { fs.unlinkSync(req.file.path); } catch (_) {}
+      try { fs.unlinkSync(req.file.path); } catch (_) { }
     }
     next(err);
   }

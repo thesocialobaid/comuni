@@ -33,6 +33,7 @@ const jobRoutes         = require('./routes/job.routes');
 const skillRoutes       = require('./routes/skill.routes');
 const applicationRoutes = require('./routes/application.routes');
 const vouchRoutes       = require('./routes/vouch.routes');
+const rootRouter = require('./routes/root.routes'); // e.g., './routes/root'
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,10 @@ app.use('/api/jobs',         jobRoutes);             // /api/jobs + nested appli
 app.use('/api/students',     studentRoutes);         // /api/students + nested skills/reviews
 app.use('/api/applications', applicationRoutes);     // /api/applications/mine
 app.use('/api/vouches',      vouchRoutes);           // /api/vouches
+// Use the router at root
+app.use('/', rootRouter); // <-- this makes it respond at /
+
+
 
 // ── 404 Handler ───────────────────────────────────────────────────────────────
 // If no route matched, return a clean 404 instead of Express's HTML error page
@@ -95,6 +100,7 @@ async function start() {
 
     // Print full route map so team members know what endpoints exist
     console.log('── Available Endpoints ─────────────────────────────────');
+    console.log(`Server running on http://localhost:${PORT}`);
     console.log('  AUTH');
     console.log('    POST   /api/auth/register');
     console.log('    POST   /api/auth/login');
