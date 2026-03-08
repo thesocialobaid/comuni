@@ -6,7 +6,8 @@
     "scripts": {
         "start": "node src/app.js",
         "dev": "nodemon src/app.js",
-        "init-db": "node initdb.js"
+        "init-db": "node initdb.js",
+        "seed": "mysql -u root -p mydb < database/seed.sql"
     }, 
     "dependencies": { 
         "bcrypt":"",
