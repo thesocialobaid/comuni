@@ -51,6 +51,10 @@ async function createJob(req, res, next) {
       return res.status(400).json({ success: false, message: 'title is required.' });
     }
 
+    if (budget !== undefined && budget < 0) {
+    return res.status(400).json({ success: false, message: 'Budget cannot be negative.' });
+    }
+
     // Insert the job
     const [result] = await conn.query(
       `INSERT INTO Job (postedBy, title, description, budget, deadline, urgent)
