@@ -1,9 +1,5 @@
 /**
  * application.routes.js
- *
- * Standalone route file for application-level endpoints that don't
- * live under a specific job (e.g., "all MY applications").
- *
  * GET /api/applications/mine
  */
 
