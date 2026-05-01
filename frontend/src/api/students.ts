@@ -1,4 +1,4 @@
-import {request} from "./client";
+import { request } from "./client";
 
 export interface Student {
   id: string;
@@ -26,59 +26,62 @@ export interface Vouch {
 }
 
 export const studentsAPI = {
-  //  GET ALL STUDENTS
-  getAll: (): Promise<Student[]> =>
-    request("/students"),
+  getAll: async (): Promise<Student[]> => {
+    const res = await request("/students");
+    return res.students ?? res ?? [];
+  },
 
-  //  GET SINGLE STUDENT
-  getById: (id: string): Promise<Student> =>
-    request(`/students/${id}`),
+  getById: async (id: string): Promise<Student> => {
+    const res = await request(`/students/${id}`);
+    return res.student ?? res;
+  },
 
-  //  UPDATE MY PROFILE
-  updateMe: (data: Partial<Student>): Promise<Student> =>
-    request("/students/me", {
+  updateMe: async (data: Partial<Student>): Promise<Student> => {
+    const res = await request("/students/me", {
       method: "PATCH",
       body: JSON.stringify(data),
-    }),
+    });
+    return res.student ?? res;
+  },
 
-  //  DELETE MY PROFILE
-  deleteMe: (): Promise<void> =>
-    request("/students/me", {
-      method: "DELETE",
-    }),
+  deleteMe: async (): Promise<void> => {
+    await request("/students/me", { method: "DELETE" });
+  },
 
-  //  SKILLS (MY PROFILE)
+  getMySkills: async (): Promise<Skill[]> => {
+    const res = await request("/students/me/skills");
+    return res.skills ?? res ?? [];
+  },
 
-  getMySkills: (): Promise<Skill[]> =>
-    request("/students/me/skills"),
-
-  addSkill: (data: { name: string; level?: string }): Promise<Skill> =>
-    request("/students/me/skills", {
+  addSkill: async (data: { name: string; level?: string }): Promise<Skill> => {
+    const res = await request("/students/me/skills", {
       method: "POST",
       body: JSON.stringify(data),
-    }),
+    });
+    return res.skill ?? res;
+  },
 
-  updateSkill: (
-    skillId: string,
-    data: Partial<Skill>
-  ): Promise<Skill> =>
-    request(`/students/me/skills/${skillId}`, {
+  updateSkill: async (skillId: string, data: Partial<Skill>): Promise<Skill> => {
+    const res = await request(`/students/me/skills/${skillId}`, {
       method: "PATCH",
       body: JSON.stringify(data),
-    }),
+    });
+    return res.skill ?? res;
+  },
 
-  deleteSkill: (skillId: string): Promise<void> =>
-    request(`/students/me/skills/${skillId}`, {
+  deleteSkill: async (skillId: string): Promise<void> => {
+    await request(`/students/me/skills/${skillId}`, {
       method: "DELETE",
-    }),
+    });
+  },
 
-  //  REVIEWS
+  getReviews: async (studentId: string): Promise<Review[]> => {
+    const res = await request(`/students/${studentId}/reviews`);
+    return res.reviews ?? res ?? [];
+  },
 
-  getReviews: (studentId: string): Promise<Review[]> =>
-    request(`/students/${studentId}/reviews`),
-
-  //  VOUCHES
-
-  getVouches: (studentId: string): Promise<Vouch[]> =>
-    request(`/students/${studentId}/vouches`),
+  getVouches: async (studentId: string): Promise<Vouch[]> => {
+    const res = await request(`/students/${studentId}/vouches`);
+    return res.vouches ?? res ?? [];
+  },
 };

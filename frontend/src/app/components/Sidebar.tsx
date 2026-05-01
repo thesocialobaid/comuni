@@ -1,17 +1,23 @@
-import { Link, useLocation } from "react-router-dom";
-import { Home, Briefcase, PlusCircle, User, FileText, LogOut, Clipboard, X } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Briefcase, PlusCircle, User, LogOut, X } from "lucide-react";
 import { useSidebar } from "../contexts/SidebarContext";
 
 export default function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { isOpen, toggleSidebar } = useSidebar();
 
   const navItems = [
     { path: "/jobs", label: "Job Feed", icon: Briefcase },
-    { path: "/", label: "Home", icon: Home },
     { path: "/post-job", label: "Post a Job", icon: PlusCircle },
     { path: "/profile", label: "My Profile", icon: User },
   ];
+
+  function handleLogout() {
+    localStorage.removeItem("token");
+    toggleSidebar();
+    navigate("/login");
+  }
 
   if (!isOpen) return null;
 
@@ -56,7 +62,9 @@ export default function Sidebar() {
             );
           })}
         </nav>
+
         <button
+          onClick={handleLogout}
           className="flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-all w-full"
           style={{ fontFamily: 'Geist', fontSize: '15px' }}
         >
