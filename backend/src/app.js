@@ -79,6 +79,7 @@ app.use('/', rootRouter); // <-- this makes it respond at /
 // ── 404 Handler ───────────────────────────────────────────────────────────────
 // If no route matched, return a clean 404 instead of Express's HTML error page
 app.use((req, res) => {
+  console.log("JWT_SECRET:", process.env.JWT_SECRET);
   res.status(404).json({
     success: false,
     message: `Route not found: ${req.method} ${req.originalUrl}`,
