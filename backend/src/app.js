@@ -79,7 +79,6 @@ app.use('/', rootRouter); // <-- this makes it respond at /
 // ── 404 Handler ───────────────────────────────────────────────────────────────
 // If no route matched, return a clean 404 instead of Express's HTML error page
 app.use((req, res) => {
-  console.log("JWT_SECRET:", process.env.JWT_SECRET);
   res.status(404).json({
     success: false,
     message: `Route not found: ${req.method} ${req.originalUrl}`,
@@ -95,9 +94,9 @@ async function start() {
   await testConnection(); // verify DB before accepting traffic
 
   app.listen(PORT, () => {
-    console.log(`\n🚀  CommuniTask API running on http://localhost:${PORT}`);
-    console.log(`📋  API base: http://localhost:${PORT}/api`);
-    console.log(`💚  Health:   http://localhost:${PORT}/health\n`);
+    console.log(`\n  CommuniTask API running on http://localhost:${PORT}`);
+    console.log(`  API base: http://localhost:${PORT}/api`);
+    console.log(`  Health:   http://localhost:${PORT}/health\n`);
 
     // Print full route map so team members know what endpoints exist
     console.log('── Available Endpoints ─────────────────────────────────');
