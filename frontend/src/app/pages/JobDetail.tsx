@@ -183,15 +183,7 @@ useEffect(() => {
   </div>
 </Link>
                           <div className="flex items-center gap-3">
-                            {app.status && (
-  <span className={`px-3 py-1 rounded-lg text-xs border ${
-    app.status === 'accepted' ? 'bg-green-100 text-green-700 border-green-200' :
-    app.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-200' :
-    'bg-blue-100 text-blue-700 border-blue-200'
-  }`} style={{ fontFamily: 'Geist', fontWeight: 500 }}>
-    {app.status}
-  </span>
-)}
+                            
                             {app.status !== 'accepted'  && (
                               <button
   onClick={async () => {

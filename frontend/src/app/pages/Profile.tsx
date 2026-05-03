@@ -885,13 +885,33 @@ return (
                 <span style={{ fontFamily: "Geist" }}>{job.applicationCount ?? 0} applicants</span>
               </div>
             </div>
-            <Link
-              to={`/jobs/${job.jobId}`}
-              className="px-4 py-2 bg-gray-900 text-white rounded-xl text-sm hover:bg-gray-700 transition-colors"
-              style={{ fontFamily: "Geist", fontWeight: 500 }}
-            >
-              View & Manage →
-            </Link>
+            <div className="flex gap-2">
+  <Link
+    to={`/jobs/${job.jobId}`}
+    className="px-4 py-2 bg-gray-900 text-white rounded-xl text-sm hover:bg-gray-700 transition-colors"
+    style={{ fontFamily: "Geist", fontWeight: 500 }}
+  >
+    View & Manage →
+  </Link>
+  {job.status === 'IN_PROGRESS' && (
+    <button
+      onClick={async () => {
+        try {
+          await request(`/jobs/${job.jobId}/complete`, { method: 'PATCH' });
+          setPostedJobs((prev: any) => prev.map((j: any) =>
+            j.jobId === job.jobId ? { ...j, status: 'COMPLETED' } : j
+          ));
+        } catch (err: any) {
+          alert(err.message);
+        }
+      }}
+      className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm hover:bg-green-700 transition-colors"
+      style={{ fontFamily: "Geist", fontWeight: 500 }}
+    >
+      Mark Complete
+    </button>
+  )}
+</div>
           </div>
         </div>
       ))

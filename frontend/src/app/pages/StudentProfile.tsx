@@ -6,6 +6,7 @@ import VideoBackground from "../components/VideoBackground";
 import TopBar from "../components/TopBar";
 import Sidebar from "../components/Sidebar";
 import { studentsAPI } from "../../api/students";
+import { request } from "../../api/client";
 const getLevelColor = (level: string) => {
   switch (level) {
     case "Expert":       return "bg-green-100 text-green-700 border-green-200";
@@ -23,7 +24,11 @@ export default function StudentProfile() {
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+const [showVouchForm, setShowVouchForm] = useState(false);
+const [vouchMessage, setVouchMessage] = useState("");
+const [vouching, setVouching] = useState(false);
+const [hasVouched, setHasVouched] = useState(false);
  useEffect(() => {
   if (!id) return;
   setLoading(true);
@@ -35,14 +40,22 @@ export default function StudentProfile() {
     studentsAPI.getReviews(id),
   ])
     .then(([s, v, r]) => {
-      setStudent(s);
-      setSkills([]);
-      setVouches(Array.isArray(v) ? v : []);
-      setReviews(Array.isArray(r) ? r : []);
-    })
+  setStudent(s);
+  setSkills([]);
+  const vouchesList = Array.isArray(v) ? v : [];
+  setVouches(vouchesList);
+  setReviews(Array.isArray(r) ? r : []);
+  setHasVouched(vouchesList.some((vouch: any) => vouch.voucherId === currentUserId));
+})
     .catch((err) => setError(err.message || "Failed to load profile"))
     .finally(() => setLoading(false));
-}, [id]);
+}, [id, currentUserId]);
+
+useEffect(() => {
+  request("/auth/me")
+    .then((res: any) => setCurrentUserId(res.student?.studentId))
+    .catch(() => {});
+}, []);
 
   if (loading) return (
     <div className="min-h-screen">
@@ -99,6 +112,63 @@ export default function StudentProfile() {
                   Roll: {student.rollNumber}
                 </span>
               )}
+                {currentUserId && currentUserId !== student?.studentId && !hasVouched && (
+  <div className="mt-4">
+    {!showVouchForm ? (
+      <button
+        onClick={() => setShowVouchForm(true)}
+        className="px-4 py-2 bg-gray-900 text-white rounded-xl text-sm hover:bg-gray-700 transition-colors"
+        style={{ fontFamily: "Geist", fontWeight: 500 }}
+      >
+        + Vouch
+      </button>
+    ) : (
+      <div className="mt-2">
+        <textarea
+          value={vouchMessage}
+          onChange={(e) => setVouchMessage(e.target.value)}
+          placeholder="Write a vouch message..."
+          className="w-full p-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-gray-400"
+          style={{ fontFamily: "Geist", fontSize: "14px" }}
+          rows={3}
+        />
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={async () => {
+  setVouching(true);
+  try {
+    await request("/vouches", {
+      method: "POST",
+      body: JSON.stringify({ voucheeId: student.studentId, comment: vouchMessage }),
+    });
+    setShowVouchForm(false);
+    setVouchMessage("");
+    setHasVouched(true);
+  } catch (err: any) {
+    console.log("vouch error:", err.message);
+    alert(err.message);
+  }
+  setVouching(false);
+}}
+            className="px-4 py-2 bg-gray-900 text-white rounded-xl text-sm hover:bg-gray-700 transition-colors"
+            style={{ fontFamily: "Geist", fontWeight: 500 }}
+          >
+            {vouching ? "Submitting..." : "Submit"}
+          </button>
+          <button
+            onClick={() => setShowVouchForm(false)}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm hover:bg-gray-200 transition-colors"
+            style={{ fontFamily: "Geist", fontWeight: 500 }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )}
+  </div>
+)}
+
+              
             </div>
           </div>
 
@@ -190,14 +260,34 @@ export default function StudentProfile() {
             <p className="text-gray-400 text-sm" style={{ fontFamily: "Geist" }}>No vouches yet.</p>
           ) : (
             <div className="space-y-4">
-              {vouches.map((v: any) => (
-                <div key={v.vouchId} className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
-                  <p className="font-medium mb-1" style={{ fontFamily: "Geist", fontSize: "14px" }}>
-                    {v.giverName ?? "Anonymous"}
-                  </p>
-                  <p className="text-gray-700 text-sm" style={{ fontFamily: "Geist", lineHeight: "1.6" }}>{v.message}</p>
-                </div>
-              ))}
+              {vouches.map((v: any) => {
+  console.log("vouch object:", v);
+  return (
+    <div key={v.vouchId} className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex items-start justify-between">
+  <div>
+    <p className="font-medium mb-1" style={{ fontFamily: "Geist", fontSize: "14px" }}>
+      {v.voucherName ?? "Anonymous"}
+    </p>
+    <p className="text-gray-700 text-sm" style={{ fontFamily: "Geist", lineHeight: "1.6" }}>{v.comment}</p>
+  </div>
+  {currentUserId === v.voucherId && (
+    <button
+      onClick={async () => {
+        try {
+          await request(`/vouches/${v.vouchId}`, { method: 'DELETE' });
+          setVouches(prev => prev.filter((vouch: any) => vouch.vouchId !== v.vouchId));
+        } catch (err: any) {
+          alert(err.message);
+        }
+      }}
+      className="text-gray-400 hover:text-red-500 transition-colors ml-2"
+    >
+      ✕
+    </button>
+  )}
+</div>
+  );
+})}
             </div>
           )}
         </motion.div>
