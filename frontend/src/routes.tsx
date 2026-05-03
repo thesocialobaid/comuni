@@ -7,6 +7,7 @@ import JobDetail from "./app/pages/JobDetail";
 import Profile from "./app/pages/Profile";
 import PostJob from "./app/pages/PostJob";
 import ErrorBoundary from "./app/components/ErrorBoundary";
+import StudentProfile from "./app/pages/StudentProfile";
 import ProtectedRoute from "./app/components/protectedroutes";
 export const router = createBrowserRouter([
   {
@@ -41,6 +42,10 @@ export const router = createBrowserRouter([
       {
         path: "/post-job",
         Component: PostJob,
+      },
+      {
+        path: "/students/:id",
+        element: <StudentProfile />,
       },
     ],
   },

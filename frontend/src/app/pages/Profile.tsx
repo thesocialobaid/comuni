@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   Mail, GraduationCap, Briefcase, Star, Edit, User, Calendar,
   Plus, Award, TrendingUp, FileText, Clipboard, Clock, DollarSign,
-  X, Search, Check,
+  X, Search, Check,Loader2
 } from "lucide-react";
 import VideoBackground from "../components/VideoBackground";
 import TopBar from "../components/TopBar";
@@ -71,25 +71,7 @@ const getStatusColor = (status: string) => {
   }
 };
 
-// ─── Static data ──────────────────────────────────────────────────────────────
-const vouches = [
-  { id: 1, from: "Sarah Khan",   skill: "React",                comment: "Ali delivered exceptional React work on our e-commerce project. Highly skilled!", date: "April 2026" },
-  { id: 2, from: "Hassan Raza",  skill: "Node.js",              comment: "Great backend developer. Built a scalable API for our mobile app.",              date: "March 2026" },
-  { id: 3, from: "Fatima Ahmed", skill: "TypeScript",           comment: "Strong TypeScript knowledge. Code quality was excellent.",                       date: "February 2026" },
-  { id: 4, from: "Ahmed Ali",    skill: "Full Stack Development", comment: "Reliable and professional. Completed the project ahead of schedule.",          date: "January 2026" },
-];
 
-const applications = [
-  { id: 1, jobTitle: "Full Stack Web Developer", company: "Tech Startup Islamabad", appliedDate: "April 28, 2026", status: "Under Review", budget: "PKR 50,000 - 80,000" },
-  { id: 2, jobTitle: "Mobile App Developer",     company: "FinTech Company",        appliedDate: "April 25, 2026", status: "Accepted",     budget: "PKR 60,000 - 100,000" },
-  { id: 3, jobTitle: "UI/UX Designer",           company: "Digital Agency",         appliedDate: "April 20, 2026", status: "Rejected",     budget: "PKR 30,000 - 45,000" },
-];
-
-const postedJobs = [
-  { id: 1, title: "Content Writer for Tech Blog", budget: "PKR 20,000 - 35,000", applicants: 8,  status: "Open",        postedDate: "April 15, 2026" },
-  { id: 2, title: "React Native Developer",        budget: "PKR 45,000 - 70,000", applicants: 15, status: "In Progress", postedDate: "March 10, 2026" },
-  { id: 3, title: "Graphic Designer",              budget: "PKR 25,000 - 40,000", applicants: 12, status: "Completed",   postedDate: "February 5, 2026" },
-];
 
 // ─── Edit Profile Modal ───────────────────────────────────────────────────────
 function EditProfileModal({
@@ -492,27 +474,17 @@ function AddSkillModal({
 export default function Profile() {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<"overview" | "applications" | "posted">(
+    
     location.pathname === "/jobs/mine" ? "posted" : "overview"
+    
   );
 
-  // Mutable profile data
-  const [profile, setProfile] = useState<ProfileData>({
-    name: "Ali Ahmed",
-    rollNumber: "20K-1234",
-    email: "ali.ahmed@student.fast.edu.pk",
-    campus: "Islamabad",
-    year: "3rd Year",
-    major: "Computer Science",
-    bio: "Full-stack developer passionate about building modern web applications. Experienced in MERN stack, TypeScript, and cloud technologies. Always eager to learn new technologies and work on challenging projects.",
-    workerRating: 4.8,
-    workerReviews: 15,
-    posterRating: 4.9,
-    posterReviews: 8,
-    completedJobs: 12,
-    totalVouches: 18,
-    completionRate: 95,
-    memberSince: "January 2025",
-  });
+ const [profile, setProfile] = useState<ProfileData | null>(null);
+ useEffect(() => {
+  request("/auth/me")
+    .then((res: any) => setProfile(res.student ?? res))
+    .catch(() => setError("Failed to load profile"));
+}, []);
 
   // Mutable skills
   const [skills, setSkills] = useState<Skill[]>([
@@ -526,11 +498,48 @@ export default function Profile() {
     { name: "Machine Learning", level: "Beginner" },
   ]);
 
+  
+const [applications, setApplications] = useState<any[]>([]);
+const [vouches, setVouches] = useState<any[]>([]);
+const [postedJobs, setPostedJobs] = useState<any[]>([]);
+const [error, setError] = useState<string | null>(null);
+
+
+
+useEffect(() => {
+  // Posted jobs
+  request("/jobs/mine")
+    .then((res: any) => setPostedJobs(res.jobs ?? []))
+    .catch(() => setPostedJobs([]));
+
+  // My applications
+  request("/applications/mine")
+    .then((res: any) => setApplications(res.applications ?? []))
+    .catch(() => setApplications([]));
+
+  // My vouches
+  request("/vouches/mine")
+    .then((res: any) => setVouches(res.vouches ?? []))
+    .catch(() => setVouches([]));
+}, []);
+
   // Modal visibility
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showAddSkill,    setShowAddSkill]    = useState(false);
 
-  return (
+  
+   if (!profile) return (
+  <div className="min-h-screen">
+    <VideoBackground />
+    <TopBar />
+    <Sidebar />
+    <div className="pt-16 flex items-center justify-center min-h-screen">
+      <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+    </div>
+  </div>
+);
+
+return (
     <div className="min-h-screen">
       <VideoBackground />
       <TopBar />
@@ -538,7 +547,7 @@ export default function Profile() {
 
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
       <AnimatePresence>
-        {showEditProfile && (
+        {showEditProfile && profile && (
           <EditProfileModal
             profile={profile}
             onSave={(p) => setProfile(p)}
@@ -768,35 +777,44 @@ export default function Profile() {
                   )}
                 </div>
 
-                {/* Vouches */}
+              {/* Vouches */}
                 <div className="bg-white border border-gray-200 rounded-xl p-6">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-xl flex items-center gap-2" style={{ fontFamily: "Geist", fontWeight: 600 }}>
-                      <Award className="w-5 h-5" /> Vouches ({profile.totalVouches})
+                      <Award className="w-5 h-5" /> Vouches ({vouches.length})
                     </h3>
                   </div>
                   <div className="space-y-4">
-                    {vouches.map((vouch) => (
-                      <div key={vouch.id} className="p-5 bg-gray-50 border border-gray-200 rounded-xl hover:border-gray-300 transition-colors">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                              <span style={{ fontFamily: "Geist", fontWeight: 600, fontSize: "14px" }}>
-                                {vouch.from.split(" ").map((n) => n[0]).join("")}
-                              </span>
-                            </div>
-                            <div>
-                              <p style={{ fontFamily: "Geist", fontWeight: 500, fontSize: "15px" }}>{vouch.from}</p>
-                              <p className="text-xs text-gray-600" style={{ fontFamily: "Geist" }}>{vouch.date}</p>
+                    {vouches.length === 0 ? (
+                      <p className="text-center text-gray-400 py-8" style={{ fontFamily: "Geist", fontSize: "14px" }}>
+                        No vouches yet.
+                      </p>
+                    ) : (
+                      vouches.map((vouch: any) => (
+                        <div key={vouch.vouchId} className="p-5 bg-gray-50 border border-gray-200 rounded-xl hover:border-gray-300 transition-colors">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                                <span style={{ fontFamily: "Geist", fontWeight: 600, fontSize: "14px" }}>
+                                  {vouch.giverName?.[0] ?? "?"}
+                                </span>
+                              </div>
+                              <div>
+                                <p style={{ fontFamily: "Geist", fontWeight: 500, fontSize: "15px" }}>
+                                  {vouch.giverName ?? "Anonymous"}
+                                </p>
+                                <p className="text-xs text-gray-600" style={{ fontFamily: "Geist" }}>
+                                  {vouch.createdAt ? new Date(vouch.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : ""}
+                                </p>
+                              </div>
                             </div>
                           </div>
-                          <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs border border-blue-200" style={{ fontFamily: "Geist", fontWeight: 500 }}>
-                            {vouch.skill}
-                          </span>
+                          <p className="text-gray-700 text-sm" style={{ fontFamily: "Geist", lineHeight: "1.6" }}>
+                            {vouch.message}
+                          </p>
                         </div>
-                        <p className="text-gray-700 text-sm" style={{ fontFamily: "Geist", lineHeight: "1.6" }}>{vouch.comment}</p>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -831,30 +849,55 @@ export default function Profile() {
             )}
 
             {/* ── Posted jobs ── */}
-            {activeTab === "posted" && (
-              <div className="space-y-4">
-                <h3 className="text-xl mb-4" style={{ fontFamily: "Geist", fontWeight: 600 }}>
-                  Jobs You've Posted ({postedJobs.length})
-                </h3>
-                {postedJobs.map((job) => (
-                  <div key={job.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:border-gray-300 transition-colors">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <h4 className="text-lg mb-1" style={{ fontFamily: "Geist", fontWeight: 600 }}>{job.title}</h4>
-                        <p className="text-gray-600 text-sm" style={{ fontFamily: "Geist" }}>Posted on {job.postedDate}</p>
-                      </div>
-                      <span className={`px-3 py-1 rounded-lg text-xs border ${getStatusColor(job.status)}`} style={{ fontFamily: "Geist", fontWeight: 500 }}>
-                        {job.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-6 text-sm text-gray-600">
-                      <div className="flex items-center gap-1.5"><DollarSign className="w-4 h-4" /><span style={{ fontFamily: "Geist" }}>{job.budget}</span></div>
-                      <div className="flex items-center gap-1.5"><User className="w-4 h-4" /><span style={{ fontFamily: "Geist" }}>{job.applicants} applicants</span></div>
-                    </div>
-                  </div>
-                ))}
+{activeTab === "posted" && (
+  <div className="space-y-4">
+    <h3 className="text-xl mb-4" style={{ fontFamily: "Geist", fontWeight: 600 }}>
+      Jobs You've Posted ({postedJobs.length})
+    </h3>
+    {postedJobs.length === 0 ? (
+      <p className="text-center text-gray-400 py-8" style={{ fontFamily: "Geist", fontSize: "14px" }}>
+        No jobs posted yet.
+      </p>
+    ) : (
+      postedJobs.map((job: any) => (
+        <div key={job.jobId} className="bg-white border border-gray-200 rounded-xl p-6 hover:border-gray-300 transition-colors">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex-1">
+              <h4 className="text-lg mb-1" style={{ fontFamily: "Geist", fontWeight: 600 }}>{job.title}</h4>
+              <p className="text-gray-600 text-sm" style={{ fontFamily: "Geist" }}>
+                {job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : ""}
+              </p>
+            </div>
+            <span className={`px-3 py-1 rounded-lg text-xs border ${getStatusColor(job.status)}`} style={{ fontFamily: "Geist", fontWeight: 500 }}>
+              {job.status}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6 text-sm text-gray-600">
+              {job.budget && (
+                <div className="flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4" />
+                  <span style={{ fontFamily: "Geist" }}>{job.budget}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-1.5">
+                <User className="w-4 h-4" />
+                <span style={{ fontFamily: "Geist" }}>{job.applicationCount ?? 0} applicants</span>
               </div>
-            )}
+            </div>
+            <Link
+              to={`/jobs/${job.jobId}`}
+              className="px-4 py-2 bg-gray-900 text-white rounded-xl text-sm hover:bg-gray-700 transition-colors"
+              style={{ fontFamily: "Geist", fontWeight: 500 }}
+            >
+              View & Manage →
+            </Link>
+          </div>
+        </div>
+      ))
+    )}
+  </div>
+)}
           </motion.div>
         </div>
       </div>
