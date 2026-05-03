@@ -3,104 +3,198 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   Mail, GraduationCap, Briefcase, Star, Edit, User, Calendar,
   Plus, Award, TrendingUp, FileText, Clipboard, Clock, DollarSign,
-  X, Search, Check,Loader2
+  X, Search, Check, Loader2, ShieldCheck,
 } from "lucide-react";
 import VideoBackground from "../components/VideoBackground";
 import TopBar from "../components/TopBar";
 import Sidebar from "../components/Sidebar";
 import { useState, useRef, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types (matched exactly to backend responses) ─────────────────────────────
+
+// GET /api/auth/me → { student: ProfileData }
 interface ProfileData {
-  name: string;
+  studentId: number;
   rollNumber: string;
   email: string;
-  campus: string;
-  year: string;
-  major: string;
-  bio: string;
-  workerRating: number;
-  workerReviews: number;
-  posterRating: number;
-  posterReviews: number;
-  completedJobs: number;
-  totalVouches: number;
-  completionRate: number;
-  memberSince: string;
-}
-
-interface Skill {
   name: string;
-  level: string;
+  bio: string | null;
+  profilePicture: string | null;
+  workerRating: number;
+  workerRatingCount: number;
+  giverRating: number;
+  giverRatingCount: number;
+  jobsPostedCount: number;
+  jobsCompletedCount: number;
+  totalVouchCount: number;
+  verifiedReviewer: boolean;
+  createdAt: string;
 }
 
-// ─── Catalogue (for Add Skill picker) ────────────────────────────────────────
-const ALL_SKILLS = [
-  "React", "Node.js", "TypeScript", "Python", "Django", "FastAPI",
-  "MongoDB", "PostgreSQL", "MySQL", "Flutter", "React Native", "Figma",
-  "Adobe XD", "UI Design", "Machine Learning", "TensorFlow", "PyTorch",
-  "AWS", "Docker", "GraphQL", "Next.js", "Vue.js", "SEO", "Copywriting",
-  "Data Analysis", "Kotlin", "Swift", "Go", "Rust", "C++",
-];
-const LEVELS = ["Beginner", "Intermediate", "Advanced", "Expert"] as const;
-type Level = typeof LEVELS[number];
+// GET /api/students/me/skills → { skills: SkillData[] }
+interface SkillData {
+  studentSkillId: number;
+  skillId: string;
+  skillName: string;
+  category: string;
+  proficiencyLevel: "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT";
+  relevantComp: number;
+  addedAt: string;
+}
 
-const CAMPUSES = ["Islamabad", "Lahore", "Karachi", "Peshawar", "Chiniot-Faisalabad"];
-const YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
+// GET /api/skills → { skills: CatalogueSkill[] }
+interface CatalogueSkill {
+  skillId: string;
+  skillName: string;
+  category: string;
+}
+
+// GET /api/applications/mine → { applications: ApplicationData[] }
+interface ApplicationData {
+  applicationId: number;
+  status: "PENDING" | "ACCEPTED" | "REJECTED" | "WITHDRAWN";
+  rankScore: number | null;
+  appliedAt: string;
+  resolvedAt: string | null;
+  jobId: number;
+  title: string;
+  budget: string | null;
+  deadline: string | null;
+  jobStatus: string;
+  urgent: boolean;
+  posterName: string;
+}
+
+// GET /api/jobs/mine → { jobs: PostedJob[] }
+interface PostedJob {
+  jobId: number;
+  title: string;
+  status: "OPEN" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+  budget: string | null;
+  deadline: string | null;
+  urgent: boolean;
+  createdAt: string;
+  completedAt: string | null;
+  workerName: string | null;
+  applicantCount: number;
+}
+
+
+
+// GET /api/students/:studentId/vouches → { vouches: ReceivedVouch[] }
+interface ReceivedVouch {
+  vouchId: number;
+  comment: string | null;
+  createdAt: string;
+  voucherName: string;
+  voucherId: number;
+  skillName: string | null;
+  skillId: string | null;
+}
 
 // ─── Colour helpers ───────────────────────────────────────────────────────────
+
 const getLevelColor = (level: string) => {
   switch (level) {
-    case "Expert":       return "bg-green-100 text-green-700 border-green-200";
-    case "Advanced":     return "bg-blue-100 text-blue-700 border-blue-200";
-    case "Intermediate": return "bg-yellow-100 text-yellow-700 border-yellow-200";
+    case "EXPERT":       return "bg-green-100 text-green-700 border-green-200";
+    case "ADVANCED":     return "bg-blue-100 text-blue-700 border-blue-200";
+    case "INTERMEDIATE": return "bg-yellow-100 text-yellow-700 border-yellow-200";
     default:             return "bg-gray-100 text-gray-700 border-gray-200";
   }
 };
 
-const getStatusColor = (status: string) => {
+const getLevelLabel = (level: string) => {
+  switch (level) {
+    case "EXPERT":       return "Expert";
+    case "ADVANCED":     return "Advanced";
+    case "INTERMEDIATE": return "Intermediate";
+    default:             return "Beginner";
+  }
+};
+
+// Application status from backend: PENDING | ACCEPTED | REJECTED | WITHDRAWN
+const getAppStatusColor = (status: string) => {
   switch (status) {
-    case "Under Review": return "bg-blue-100 text-blue-700 border-blue-200";
-    case "Accepted":     return "bg-green-100 text-green-700 border-green-200";
-    case "Rejected":     return "bg-red-100 text-red-700 border-red-200";
-    case "Open":         return "bg-green-100 text-green-700 border-green-200";
-    case "In Progress":  return "bg-yellow-100 text-yellow-700 border-yellow-200";
-    case "Completed":    return "bg-gray-100 text-gray-700 border-gray-200";
-    default:             return "bg-gray-100 text-gray-700 border-gray-200";
+    case "ACCEPTED":  return "bg-green-100 text-green-700 border-green-200";
+    case "REJECTED":  return "bg-red-100 text-red-700 border-red-200";
+    case "WITHDRAWN": return "bg-gray-100 text-gray-500 border-gray-200";
+    default:          return "bg-blue-100 text-blue-700 border-blue-200"; // PENDING
   }
 };
 
+const getAppStatusLabel = (status: string) => {
+  switch (status) {
+    case "ACCEPTED":  return "Accepted";
+    case "REJECTED":  return "Rejected";
+    case "WITHDRAWN": return "Withdrawn";
+    default:          return "Under Review";
+  }
+};
 
+// Job status from backend: OPEN | IN_PROGRESS | COMPLETED | CANCELLED
+const getJobStatusColor = (status: string) => {
+  switch (status) {
+    case "OPEN":        return "bg-green-100 text-green-700 border-green-200";
+    case "IN_PROGRESS": return "bg-yellow-100 text-yellow-700 border-yellow-200";
+    case "COMPLETED":   return "bg-gray-100 text-gray-700 border-gray-200";
+    case "CANCELLED":   return "bg-red-100 text-red-700 border-red-200";
+    default:            return "bg-gray-100 text-gray-700 border-gray-200";
+  }
+};
+
+const getJobStatusLabel = (status: string) => {
+  switch (status) {
+    case "OPEN":        return "Open";
+    case "IN_PROGRESS": return "In Progress";
+    case "COMPLETED":   return "Completed";
+    case "CANCELLED":   return "Cancelled";
+    default:            return status;
+  }
+};
 
 // ─── Edit Profile Modal ───────────────────────────────────────────────────────
+// PATCH /api/students/me — only accepts: name, bio, profilePicture
 function EditProfileModal({
   profile,
   onSave,
   onClose,
 }: {
   profile: ProfileData;
-  onSave: (p: ProfileData) => void;
+  onSave: (updated: Partial<ProfileData>) => void;
   onClose: () => void;
 }) {
-  const [form, setForm] = useState({ ...profile });
-  const set = (key: keyof ProfileData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
-    setForm((f) => ({ ...f, [key]: e.target.value }));
+  const [name, setName]   = useState(profile.name);
+  const [bio, setBio]     = useState(profile.bio ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState<string | null>(null);
 
   const inputCls = "w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-gray-400 transition-colors";
 
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await request("/students/me", {
+        method: "PATCH",
+        body: JSON.stringify({ name: name.trim(), bio: bio.trim() }),
+      });
+      onSave(res.student ?? { name: name.trim(), bio: bio.trim() });
+      onClose();
+    } catch (err: any) {
+      setError(err.message || "Failed to save changes.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      {/* Backdrop */}
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="absolute inset-0 bg-black/30 backdrop-blur-sm"
         onClick={onClose}
       />
-
-      {/* Modal */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -109,15 +203,9 @@ function EditProfileModal({
         className="relative w-full max-w-lg bg-white/95 backdrop-blur-xl rounded-3xl p-8 border border-gray-200 shadow-2xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-center justify-between mb-7">
-          <h2 className="text-2xl" style={{ fontFamily: "Geist", fontWeight: 600 }}>
-            Edit Profile
-          </h2>
-          <button
-            onClick={onClose}
-            className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 rounded-xl transition-colors"
-          >
+          <h2 className="text-2xl" style={{ fontFamily: "Geist", fontWeight: 600 }}>Edit Profile</h2>
+          <button onClick={onClose} className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 rounded-xl transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -129,8 +217,8 @@ function EditProfileModal({
               Full Name
             </label>
             <input
-              value={form.name}
-              onChange={set("name")}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               className={inputCls}
               style={{ fontFamily: "Geist", fontSize: "15px" }}
             />
@@ -143,56 +231,10 @@ function EditProfileModal({
             </label>
             <textarea
               rows={4}
-              value={form.bio}
-              onChange={set("bio")}
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              placeholder="Tell others about yourself…"
               className={`${inputCls} resize-none`}
-              style={{ fontFamily: "Geist", fontSize: "15px" }}
-            />
-          </div>
-
-          {/* Campus + Year */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block mb-1.5 text-gray-700" style={{ fontFamily: "Geist", fontSize: "13px", fontWeight: 500 }}>
-                Campus
-              </label>
-              <select
-                value={form.campus}
-                onChange={set("campus")}
-                className={`${inputCls} cursor-pointer`}
-                style={{ fontFamily: "Geist", fontSize: "15px" }}
-              >
-                {CAMPUSES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block mb-1.5 text-gray-700" style={{ fontFamily: "Geist", fontSize: "13px", fontWeight: 500 }}>
-                Year
-              </label>
-              <select
-                value={form.year}
-                onChange={set("year")}
-                className={`${inputCls} cursor-pointer`}
-                style={{ fontFamily: "Geist", fontSize: "15px" }}
-              >
-                {YEARS.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Major */}
-          <div>
-            <label className="block mb-1.5 text-gray-700" style={{ fontFamily: "Geist", fontSize: "13px", fontWeight: 500 }}>
-              Major / Program
-            </label>
-            <input
-              value={form.major}
-              onChange={set("major")}
-              className={inputCls}
               style={{ fontFamily: "Geist", fontSize: "15px" }}
             />
           </div>
@@ -204,7 +246,7 @@ function EditProfileModal({
                 Roll Number <span className="text-gray-400">(fixed)</span>
               </label>
               <input
-                value={form.rollNumber}
+                value={profile.rollNumber}
                 disabled
                 className={`${inputCls} bg-gray-50 text-gray-400 cursor-not-allowed`}
                 style={{ fontFamily: "Geist", fontSize: "15px" }}
@@ -215,7 +257,7 @@ function EditProfileModal({
                 Email <span className="text-gray-400">(fixed)</span>
               </label>
               <input
-                value={form.email}
+                value={profile.email}
                 disabled
                 className={`${inputCls} bg-gray-50 text-gray-400 cursor-not-allowed`}
                 style={{ fontFamily: "Geist", fontSize: "15px" }}
@@ -224,7 +266,10 @@ function EditProfileModal({
           </div>
         </div>
 
-        {/* Actions */}
+        {error && (
+          <p className="mt-4 text-sm text-red-500" style={{ fontFamily: "Geist" }}>{error}</p>
+        )}
+
         <div className="flex gap-3 mt-8">
           <button
             onClick={onClose}
@@ -234,15 +279,13 @@ function EditProfileModal({
             Cancel
           </button>
           <button
-            onClick={() => { onSave(form); onClose(); }}
-            className="flex-1 py-3 bg-gradient-to-b from-[#2a2a2a] to-[#1a1a1a] text-white rounded-2xl hover:from-[#333] hover:to-[#222] transition-all flex items-center justify-center gap-2"
-            style={{
-              fontFamily: "Geist", fontSize: "15px", fontWeight: 500,
-              boxShadow: "inset -4px -6px 25px 0px rgba(201,201,201,0.08), inset 4px 4px 10px 0px rgba(29,29,29,0.24)",
-            }}
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-3 bg-gradient-to-b from-[#2a2a2a] to-[#1a1a1a] text-white rounded-2xl hover:from-[#333] hover:to-[#222] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+            style={{ fontFamily: "Geist", fontSize: "15px", fontWeight: 500 }}
           >
-            <Check className="w-4 h-4" />
-            Save Changes
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            {saving ? "Saving…" : "Save Changes"}
           </button>
         </div>
       </motion.div>
@@ -251,26 +294,37 @@ function EditProfileModal({
 }
 
 // ─── Add Skill Modal ──────────────────────────────────────────────────────────
+// Loads real skills from GET /api/skills, then POSTs to /api/students/me/skills
+// Body: { skillId, proficiencyLevel }  (skillId is the DB id, not display name)
+const LEVELS = ["BEGINNER", "INTERMEDIATE", "ADVANCED", "EXPERT"] as const;
+type Level = typeof LEVELS[number];
+
 function AddSkillModal({
-  existingSkills,
+  existingSkillIds,
   onAdd,
   onClose,
 }: {
-  existingSkills: Skill[];
-  onAdd: (skill: Skill) => void;
+  existingSkillIds: Set<string>;
+  onAdd: (skill: SkillData) => void;
   onClose: () => void;
 }) {
-  const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<string | null>(null);
-  const [level, setLevel] = useState<Level>("Intermediate");
-  const [dropOpen, setDropOpen] = useState(false);
+  const [catalogue, setCatalogue]   = useState<CatalogueSkill[]>([]);
+  const [search, setSearch]         = useState("");
+  const [selected, setSelected]     = useState<CatalogueSkill | null>(null);
+  const [level, setLevel]           = useState<Level>("INTERMEDIATE");
+  const [dropOpen, setDropOpen]     = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError]           = useState<string | null>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
-  const existingNames = new Set(existingSkills.map((s) => s.name));
-  const filtered = ALL_SKILLS.filter(
-    (s) => !existingNames.has(s) && s.toLowerCase().includes(search.toLowerCase())
-  );
+  // Load skill catalogue from backend
+  useEffect(() => {
+    request("/skills")
+      .then((res: any) => setCatalogue(res.skills ?? []))
+      .catch(() => {});
+  }, []);
 
+  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropRef.current && !dropRef.current.contains(e.target as Node)) setDropOpen(false);
@@ -279,39 +333,51 @@ function AddSkillModal({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // The confirmed skill name is either the selected suggestion or whatever was typed
-  const confirmedName = selected ?? (search.trim() || null);
-  const isDuplicate = !!confirmedName && existingNames.has(confirmedName);
+  const filtered = catalogue.filter(
+    (s) =>
+      !existingSkillIds.has(s.skillId) &&
+      s.skillName.toLowerCase().includes(search.toLowerCase())
+  );
 
- const handleAdd = async () => {
-  if (!confirmedName || isDuplicate) return;
-  try {
-    await request("/students/me/skills", {
-      method: "POST",
-      body: JSON.stringify({
-        skillId: confirmedName,
-        proficiencyLevel: level.toUpperCase(),
-      }),
-    });
-  } catch (e) {
-    // fails silently, still adds locally
-  }
-  onAdd({ name: confirmedName, level });
-  onClose();
-};
+  const isDuplicate = selected ? existingSkillIds.has(selected.skillId) : false;
 
-  
+  const handleAdd = async () => {
+    if (!selected || isDuplicate) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await request("/students/me/skills", {
+        method: "POST",
+        body: JSON.stringify({
+          skillId: selected.skillId,
+          proficiencyLevel: level,
+        }),
+      });
+      // Build a local SkillData to optimistically update UI
+      onAdd({
+        studentSkillId: Date.now(), // temp id until refetch
+        skillId: selected.skillId,
+        skillName: selected.skillName,
+        category: selected.category,
+        proficiencyLevel: level,
+        relevantComp: 0,
+        addedAt: new Date().toISOString(),
+      });
+      onClose();
+    } catch (err: any) {
+      setError(err.message || "Failed to add skill.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="absolute inset-0 bg-black/30 backdrop-blur-sm"
         onClick={onClose}
       />
-
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -320,20 +386,14 @@ function AddSkillModal({
         className="relative w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl p-8 border border-gray-200 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-center justify-between mb-7">
-          <h2 className="text-2xl" style={{ fontFamily: "Geist", fontWeight: 600 }}>
-            Add a Skill
-          </h2>
-          <button
-            onClick={onClose}
-            className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 rounded-xl transition-colors"
-          >
+          <h2 className="text-2xl" style={{ fontFamily: "Geist", fontWeight: 600 }}>Add a Skill</h2>
+          <button onClick={onClose} className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 rounded-xl transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Skill input */}
+        {/* Skill search */}
         <div className="mb-5" ref={dropRef}>
           <label className="block mb-2 text-gray-700" style={{ fontFamily: "Geist", fontSize: "13px", fontWeight: 500 }}>
             Skill Name
@@ -343,16 +403,10 @@ function AddSkillModal({
             <input
               type="text"
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setSelected(null);
-                setDropOpen(true);
-              }}
+              onChange={(e) => { setSearch(e.target.value); setSelected(null); setDropOpen(true); }}
               onFocus={() => setDropOpen(true)}
-              placeholder="Type any skill or pick a suggestion…"
-              className={`w-full pl-11 pr-10 py-3 bg-white border rounded-xl outline-none transition-colors ${
-                isDuplicate ? "border-red-300 focus:border-red-400" : "border-gray-200 focus:border-gray-400"
-              }`}
+              placeholder="Search from skill catalogue…"
+              className="w-full pl-11 pr-10 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-gray-400 transition-colors"
               style={{ fontFamily: "Geist", fontSize: "15px" }}
             />
             {search && (
@@ -365,7 +419,6 @@ function AddSkillModal({
               </button>
             )}
 
-            {/* Suggestions dropdown */}
             <AnimatePresence>
               {dropOpen && filtered.length > 0 && (
                 <motion.div
@@ -378,17 +431,14 @@ function AddSkillModal({
                   <div className="max-h-48 overflow-y-auto">
                     {filtered.slice(0, 8).map((s) => (
                       <button
-                        key={s}
+                        key={s.skillId}
                         type="button"
-                        onMouseDown={() => {
-                          setSelected(s);
-                          setSearch(s);
-                          setDropOpen(false);
-                        }}
-                        className="w-full text-left px-5 py-3 hover:bg-gray-50 transition-colors"
+                        onMouseDown={() => { setSelected(s); setSearch(s.skillName); setDropOpen(false); }}
+                        className="w-full text-left px-5 py-3 hover:bg-gray-50 transition-colors flex items-center justify-between"
                         style={{ fontFamily: "Geist", fontSize: "14px" }}
                       >
-                        {s}
+                        <span>{s.skillName}</span>
+                        <span className="text-xs text-gray-400">{s.category}</span>
                       </button>
                     ))}
                   </div>
@@ -397,20 +447,15 @@ function AddSkillModal({
             </AnimatePresence>
           </div>
 
-          {/* Duplicate warning */}
-          <AnimatePresence>
-            {isDuplicate && (
-              <motion.p
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="mt-2 text-red-500"
-                style={{ fontFamily: "Geist", fontSize: "13px" }}
-              >
-                You've already added "{confirmedName}".
-              </motion.p>
-            )}
-          </AnimatePresence>
+          {selected ? (
+            <p className="mt-2 text-sm text-green-600" style={{ fontFamily: "Geist" }}>
+              ✓ {selected.skillName} selected
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-gray-400" style={{ fontFamily: "Geist" }}>
+              Skills must be picked from the catalogue above.
+            </p>
+          )}
         </div>
 
         {/* Proficiency level */}
@@ -431,13 +476,16 @@ function AddSkillModal({
                 }`}
                 style={{ fontFamily: "Geist", fontWeight: 500 }}
               >
-                {l}
+                {getLevelLabel(l)}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Actions */}
+        {error && (
+          <p className="mb-4 text-sm text-red-500" style={{ fontFamily: "Geist" }}>{error}</p>
+        )}
+
         <div className="flex gap-3">
           <button
             onClick={onClose}
@@ -448,21 +496,16 @@ function AddSkillModal({
           </button>
           <button
             onClick={handleAdd}
-            disabled={!confirmedName || isDuplicate}
+            disabled={!selected || isDuplicate || submitting}
             className={`flex-1 py-3 rounded-2xl text-white transition-all flex items-center justify-center gap-2 ${
-              confirmedName && !isDuplicate
+              selected && !isDuplicate && !submitting
                 ? "bg-gradient-to-b from-[#2a2a2a] to-[#1a1a1a] hover:from-[#333] hover:to-[#222]"
                 : "bg-gray-300 cursor-not-allowed"
             }`}
-            style={{
-              fontFamily: "Geist", fontSize: "15px", fontWeight: 500,
-              boxShadow: confirmedName && !isDuplicate
-                ? "inset -4px -6px 25px 0px rgba(201,201,201,0.08), inset 4px 4px 10px 0px rgba(29,29,29,0.24)"
-                : "none",
-            }}
+            style={{ fontFamily: "Geist", fontSize: "15px", fontWeight: 500 }}
           >
-            <Plus className="w-4 h-4" />
-            Add Skill
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            {submitting ? "Adding…" : "Add Skill"}
           </button>
         </div>
       </motion.div>
@@ -472,85 +515,99 @@ function AddSkillModal({
 
 // ─── Main Profile page ────────────────────────────────────────────────────────
 export default function Profile() {
-  const location = useLocation();
-  const [activeTab, setActiveTab] = useState<"overview" | "applications" | "posted">(
-    
-    location.pathname === "/jobs/mine" ? "posted" : "overview"
-    
+  const [activeTab, setActiveTab] = useState<"overview" | "applications" | "posted">("overview");
+
+  const [profile, setProfile]         = useState<ProfileData | null>(null);
+  const [skills, setSkills]           = useState<SkillData[]>([]);
+  const [applications, setApplications] = useState<ApplicationData[]>([]);
+  const [postedJobs, setPostedJobs]   = useState<PostedJob[]>([]);
+  const [receivedVouches, setReceivedVouches] = useState<ReceivedVouch[]>([]);
+
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState<string | null>(null);
+
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showAddSkill, setShowAddSkill]       = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      request("/auth/me"),
+      request("/students/me/skills"),
+      request("/applications/mine"),
+      request("/jobs/mine"),
+    ])
+      .then(([meRes, skillsRes, appsRes, jobsRes]: any[]) => {
+        const s = meRes.student ?? null;
+        if (s) {
+          s.workerRating      = parseFloat(s.workerRating)      || 0;
+          s.giverRating       = parseFloat(s.giverRating)       || 0;
+          s.workerRatingCount = parseInt(s.workerRatingCount)   || 0;
+          s.giverRatingCount  = parseInt(s.giverRatingCount)    || 0;
+        }
+        setProfile(s);
+        setSkills(skillsRes.skills ?? []);
+        setApplications(appsRes.applications ?? []);
+        setPostedJobs(jobsRes.jobs ?? []);
+
+        // Fetch vouches received using the studentId we just got
+        if (s?.studentId) {
+          request(`/students/${s.studentId}/vouches`)
+            .then((vRes: any) => setReceivedVouches(vRes.vouches ?? []))
+            .catch(() => {});
+        }
+      })
+      .catch(() => setError("Failed to load profile"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const existingSkillIds = new Set(skills.map((s) => s.skillId));
+
+  const handleRemoveSkill = async (skillId: string) => {
+    try {
+      await request(`/students/me/skills/${skillId}`, { method: "DELETE" });
+      setSkills((prev) => prev.filter((s) => s.skillId !== skillId));
+    } catch (err: any) {
+      alert(err.message || "Failed to remove skill.");
+    }
+  };
+
+  // Completion rate derived (backend doesn't return it from /auth/me)
+  const completionRate = profile
+    ? profile.jobsPostedCount === 0
+      ? 0
+      : Math.round((profile.jobsCompletedCount / profile.jobsPostedCount) * 100)
+    : 0;
+
+  if (loading) return (
+    <div className="min-h-screen">
+      <VideoBackground /><TopBar /><Sidebar />
+      <div className="pt-16 flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      </div>
+    </div>
   );
 
- const [profile, setProfile] = useState<ProfileData | null>(null);
- useEffect(() => {
-  request("/auth/me")
-    .then((res: any) => setProfile(res.student ?? res))
-    .catch(() => setError("Failed to load profile"));
-}, []);
-
-  // Mutable skills
-  const [skills, setSkills] = useState<Skill[]>([
-    { name: "React",            level: "Expert" },
-    { name: "Node.js",          level: "Advanced" },
-    { name: "TypeScript",       level: "Advanced" },
-    { name: "MongoDB",          level: "Intermediate" },
-    { name: "Python",           level: "Intermediate" },
-    { name: "AWS",              level: "Intermediate" },
-    { name: "Docker",           level: "Beginner" },
-    { name: "Machine Learning", level: "Beginner" },
-  ]);
-
-  
-const [applications, setApplications] = useState<any[]>([]);
-const [vouches, setVouches] = useState<any[]>([]);
-const [postedJobs, setPostedJobs] = useState<any[]>([]);
-const [error, setError] = useState<string | null>(null);
-
-
-
-useEffect(() => {
-  // Posted jobs
-  request("/jobs/mine")
-    .then((res: any) => setPostedJobs(res.jobs ?? []))
-    .catch(() => setPostedJobs([]));
-
-  // My applications
-  request("/applications/mine")
-    .then((res: any) => setApplications(res.applications ?? []))
-    .catch(() => setApplications([]));
-
-  // My vouches
-  request("/vouches/mine")
-    .then((res: any) => setVouches(res.vouches ?? []))
-    .catch(() => setVouches([]));
-}, []);
-
-  // Modal visibility
-  const [showEditProfile, setShowEditProfile] = useState(false);
-  const [showAddSkill,    setShowAddSkill]    = useState(false);
-
-  
-   if (!profile) return (
-  <div className="min-h-screen">
-    <VideoBackground />
-    <TopBar />
-    <Sidebar />
-    <div className="pt-16 flex items-center justify-center min-h-screen">
-      <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+  if (error || !profile) return (
+    <div className="min-h-screen">
+      <VideoBackground /><TopBar /><Sidebar />
+      <div className="pt-16 flex items-center justify-center min-h-screen">
+        <p className="text-red-500" style={{ fontFamily: "Geist" }}>{error ?? "Profile not found."}</p>
+      </div>
     </div>
-  </div>
-);
+  );
 
-return (
+  return (
     <div className="min-h-screen">
       <VideoBackground />
       <TopBar />
       <Sidebar />
 
-      {/* ── Modals ─────────────────────────────────────────────────────────── */}
+      {/* ── Modals ── */}
       <AnimatePresence>
-        {showEditProfile && profile && (
+        {showEditProfile && (
           <EditProfileModal
             profile={profile}
-            onSave={(p) => setProfile(p)}
+            onSave={(updated) => setProfile((p) => p ? { ...p, ...updated } : p)}
             onClose={() => setShowEditProfile(false)}
           />
         )}
@@ -559,18 +616,17 @@ return (
       <AnimatePresence>
         {showAddSkill && (
           <AddSkillModal
-            existingSkills={skills}
-            onAdd={(s) => setSkills((prev) => [...prev, s])}
+            existingSkillIds={existingSkillIds}
+            onAdd={(skill) => setSkills((prev) => [...prev, skill])}
             onClose={() => setShowAddSkill(false)}
           />
         )}
       </AnimatePresence>
 
-      {/* ── Page content ───────────────────────────────────────────────────── */}
       <div className="pt-16 min-h-screen">
         <div className="max-w-6xl mx-auto px-8 py-8">
 
-          {/* Profile card */}
+          {/* ── Profile card ── */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -583,36 +639,37 @@ return (
                   <User className="w-14 h-14 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-3xl mb-2" style={{ fontFamily: "Geist", fontWeight: 600 }}>
-                    {profile.name}
-                  </h2>
-                  <div className="flex items-center gap-4 text-gray-600 mb-2">
-                    <span style={{ fontFamily: "Geist", fontSize: "14px" }}>
-                      Roll: {profile.rollNumber}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4 text-gray-600 mb-3">
-                    <div className="flex items-center gap-1.5">
-                      <Mail className="w-4 h-4" />
-                      <span style={{ fontFamily: "Geist", fontSize: "14px" }}>{profile.email}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 text-gray-600">
-                    <div className="flex items-center gap-1.5">
-                      <GraduationCap className="w-4 h-4" />
-                      <span style={{ fontFamily: "Geist", fontSize: "14px" }}>
-                        {profile.campus} Campus · {profile.year}
+                  <div className="flex items-center gap-3 mb-1">
+                    <h2 className="text-3xl" style={{ fontFamily: "Geist", fontWeight: 600 }}>
+                      {profile.name}
+                    </h2>
+                    {profile.verifiedReviewer && (
+                      <span
+                        className="flex items-center gap-1 px-2.5 py-1 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs"
+                        style={{ fontFamily: "Geist", fontWeight: 500 }}
+                        title="Completed 3+ jobs — can give vouches"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        Verified
                       </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Briefcase className="w-4 h-4" />
-                      <span style={{ fontFamily: "Geist", fontSize: "14px" }}>{profile.major}</span>
-                    </div>
+                    )}
+                  </div>
+                  <p className="text-gray-500 mb-2" style={{ fontFamily: "Geist", fontSize: "14px" }}>
+                    {profile.rollNumber}
+                  </p>
+                  <div className="flex items-center gap-1.5 text-gray-600 mb-2">
+                    <Mail className="w-4 h-4" />
+                    <span style={{ fontFamily: "Geist", fontSize: "14px" }}>{profile.email}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-gray-500">
+                    <Calendar className="w-4 h-4" />
+                    <span style={{ fontFamily: "Geist", fontSize: "13px" }}>
+                      Member since {new Date(profile.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* Edit Profile button */}
               <button
                 onClick={() => setShowEditProfile(true)}
                 className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl flex items-center gap-2 transition-colors"
@@ -623,20 +680,21 @@ return (
               </button>
             </div>
 
-            <div className="mb-8">
-              <h3 className="text-lg mb-3" style={{ fontFamily: "Geist", fontWeight: 600 }}>
-                About
-              </h3>
-              <p className="text-gray-700" style={{ fontFamily: "Geist", fontSize: "15px", lineHeight: "1.7" }}>
-                {profile.bio}
-              </p>
-            </div>
+            {profile.bio && (
+              <div className="mb-8">
+                <h3 className="text-lg mb-3" style={{ fontFamily: "Geist", fontWeight: 600 }}>About</h3>
+                <p className="text-gray-700" style={{ fontFamily: "Geist", fontSize: "15px", lineHeight: "1.7" }}>
+                  {profile.bio}
+                </p>
+              </div>
+            )}
 
+            {/* Stats */}
             <div className="grid grid-cols-4 gap-4">
               {[
-                { value: profile.completedJobs,   label: "Jobs Completed" },
-                { value: profile.totalVouches,    label: "Total Vouches" },
-                { value: `${profile.completionRate}%`, label: "Completion Rate" },
+                { value: profile.jobsCompletedCount, label: "Jobs Completed" },
+                { value: profile.totalVouchCount,    label: "Total Vouches" },
+                { value: `${completionRate}%`,        label: "Completion Rate" },
               ].map((stat) => (
                 <div key={stat.label} className="bg-white border border-gray-200 rounded-xl p-4 text-center">
                   <p className="text-2xl mb-1" style={{ fontFamily: "Geist", fontWeight: 600 }}>{stat.value}</p>
@@ -644,16 +702,15 @@ return (
                 </div>
               ))}
               <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-                <div className="flex items-center justify-center gap-1.5 mb-1">
-                  <Calendar className="w-5 h-5 text-gray-700" />
-                  <p className="text-sm" style={{ fontFamily: "Geist", fontWeight: 600 }}>{profile.memberSince}</p>
-                </div>
-                <p className="text-gray-600 text-sm" style={{ fontFamily: "Geist" }}>Member Since</p>
+                <p className="text-2xl mb-1" style={{ fontFamily: "Geist", fontWeight: 600 }}>
+                  {profile.jobsPostedCount}
+                </p>
+                <p className="text-gray-600 text-sm" style={{ fontFamily: "Geist" }}>Jobs Posted</p>
               </div>
             </div>
           </motion.div>
 
-          {/* Tabs card */}
+          {/* ── Tabs card ── */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -662,28 +719,31 @@ return (
           >
             {/* Tab bar */}
             <div className="flex gap-2 mb-6 border-b border-gray-200">
-              {(["overview", "applications", "posted"] as const).map((tab) => {
-                const icons = { overview: null, applications: <FileText className="w-4 h-4" />, posted: <Clipboard className="w-4 h-4" /> };
-                const labels = { overview: "Overview", applications: "My Applications", posted: "My Posted Jobs" };
-                return (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-6 py-3 flex items-center gap-2 transition-all ${
-                      activeTab === tab ? "border-b-2 border-gray-900 text-gray-900" : "text-gray-600 hover:text-gray-900"
-                    }`}
-                    style={{ fontFamily: "Geist", fontSize: "15px", fontWeight: activeTab === tab ? 500 : 400 }}
-                  >
-                    {icons[tab]}
-                    {labels[tab]}
-                  </button>
-                );
-              })}
+              {([
+                { key: "overview",      label: "Overview",         icon: null },
+                { key: "applications",  label: "My Applications",  icon: <FileText className="w-4 h-4" /> },
+                { key: "posted",        label: "My Posted Jobs",   icon: <Clipboard className="w-4 h-4" /> },
+              ] as const).map(({ key, label, icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`px-6 py-3 flex items-center gap-2 transition-all ${
+                    activeTab === key
+                      ? "border-b-2 border-gray-900 text-gray-900"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                  style={{ fontFamily: "Geist", fontSize: "15px", fontWeight: activeTab === key ? 500 : 400 }}
+                >
+                  {icon}
+                  {label}
+                </button>
+              ))}
             </div>
 
-            {/* ── Overview ── */}
+            {/* ── Overview tab ── */}
             {activeTab === "overview" && (
               <div className="space-y-6">
+                {/* Ratings */}
                 <div className="grid grid-cols-2 gap-6">
                   {/* Worker rating */}
                   <div className="bg-white border border-gray-200 rounded-xl p-6">
@@ -691,14 +751,18 @@ return (
                       <TrendingUp className="w-5 h-5" /> Rating as Worker
                     </h3>
                     <div className="flex items-center gap-4 mb-4">
-                      <div className="text-5xl" style={{ fontFamily: "Geist", fontWeight: 600 }}>{profile.workerRating}</div>
+                      <div className="text-5xl" style={{ fontFamily: "Geist", fontWeight: 600 }}>
+                        {profile.workerRating.toFixed(1)}
+                      </div>
                       <div>
                         <div className="flex gap-1 mb-1">
                           {[...Array(5)].map((_, i) => (
                             <Star key={i} className={`w-5 h-5 ${i < Math.floor(profile.workerRating) ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
                           ))}
                         </div>
-                        <p className="text-sm text-gray-600" style={{ fontFamily: "Geist" }}>Based on {profile.workerReviews} reviews</p>
+                        <p className="text-sm text-gray-600" style={{ fontFamily: "Geist" }}>
+                          Based on {profile.workerRatingCount} review{profile.workerRatingCount !== 1 ? "s" : ""}
+                        </p>
                       </div>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3">
@@ -706,24 +770,28 @@ return (
                     </div>
                   </div>
 
-                  {/* Poster rating */}
+                  {/* Giver rating */}
                   <div className="bg-white border border-gray-200 rounded-xl p-6">
                     <h3 className="text-xl mb-4 flex items-center gap-2" style={{ fontFamily: "Geist", fontWeight: 600 }}>
                       <Briefcase className="w-5 h-5" /> Rating as Job Poster
                     </h3>
                     <div className="flex items-center gap-4 mb-4">
-                      <div className="text-5xl" style={{ fontFamily: "Geist", fontWeight: 600 }}>{profile.posterRating}</div>
+                      <div className="text-5xl" style={{ fontFamily: "Geist", fontWeight: 600 }}>
+                        {profile.giverRating.toFixed(1)}
+                      </div>
                       <div>
                         <div className="flex gap-1 mb-1">
                           {[...Array(5)].map((_, i) => (
-                            <Star key={i} className={`w-5 h-5 ${i < Math.floor(profile.posterRating) ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
+                            <Star key={i} className={`w-5 h-5 ${i < Math.floor(profile.giverRating) ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
                           ))}
                         </div>
-                        <p className="text-sm text-gray-600" style={{ fontFamily: "Geist" }}>Based on {profile.posterReviews} reviews</p>
+                        <p className="text-sm text-gray-600" style={{ fontFamily: "Geist" }}>
+                          Based on {profile.giverRatingCount} review{profile.giverRatingCount !== 1 ? "s" : ""}
+                        </p>
                       </div>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3">
-                      <div className="bg-gradient-to-r from-blue-400 to-blue-500 h-3 rounded-full" style={{ width: `${(profile.posterRating / 5) * 100}%` }} />
+                      <div className="bg-gradient-to-r from-blue-400 to-blue-500 h-3 rounded-full" style={{ width: `${(profile.giverRating / 5) * 100}%` }} />
                     </div>
                   </div>
                 </div>
@@ -747,21 +815,29 @@ return (
                     <AnimatePresence>
                       {skills.map((skill) => (
                         <motion.div
-                          key={skill.name}
+                          key={skill.skillId}
                           initial={{ opacity: 0, scale: 0.92 }}
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.92 }}
                           transition={{ duration: 0.18 }}
                           className="flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-xl group"
                         >
-                          <span style={{ fontFamily: "Geist", fontSize: "15px", fontWeight: 500 }}>{skill.name}</span>
+                          <div>
+                            <p style={{ fontFamily: "Geist", fontSize: "15px", fontWeight: 500 }}>{skill.skillName}</p>
+                            {skill.relevantComp > 0 && (
+                              <p className="text-xs text-gray-400 mt-0.5" style={{ fontFamily: "Geist" }}>
+                                {skill.relevantComp} vouch{skill.relevantComp !== 1 ? "es" : ""}
+                              </p>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2">
-                            <span className={`px-3 py-1 rounded-lg text-xs border ${getLevelColor(skill.level)}`} style={{ fontFamily: "Geist", fontWeight: 500 }}>
-                              {skill.level}
+                            <span className={`px-3 py-1 rounded-lg text-xs border ${getLevelColor(skill.proficiencyLevel)}`} style={{ fontFamily: "Geist", fontWeight: 500 }}>
+                              {getLevelLabel(skill.proficiencyLevel)}
                             </span>
                             <button
-                              onClick={() => setSkills((prev) => prev.filter((s) => s.name !== skill.name))}
+                              onClick={() => handleRemoveSkill(skill.skillId)}
                               className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center hover:bg-red-100 rounded-lg text-red-500"
+                              title="Remove skill"
                             >
                               <X className="w-3.5 h-3.5" />
                             </button>
@@ -777,147 +853,193 @@ return (
                   )}
                 </div>
 
-              {/* Vouches */}
+                {/* Vouches received */}
                 <div className="bg-white border border-gray-200 rounded-xl p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-xl flex items-center gap-2" style={{ fontFamily: "Geist", fontWeight: 600 }}>
-                      <Award className="w-5 h-5" /> Vouches ({vouches.length})
-                    </h3>
-                  </div>
-                  <div className="space-y-4">
-                    {vouches.length === 0 ? (
-                      <p className="text-center text-gray-400 py-8" style={{ fontFamily: "Geist", fontSize: "14px" }}>
-                        No vouches yet.
-                      </p>
-                    ) : (
-                      vouches.map((vouch: any) => (
-                        <div key={vouch.vouchId} className="p-5 bg-gray-50 border border-gray-200 rounded-xl hover:border-gray-300 transition-colors">
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                                <span style={{ fontFamily: "Geist", fontWeight: 600, fontSize: "14px" }}>
-                                  {vouch.giverName?.[0] ?? "?"}
-                                </span>
-                              </div>
-                              <div>
-                                <p style={{ fontFamily: "Geist", fontWeight: 500, fontSize: "15px" }}>
-                                  {vouch.giverName ?? "Anonymous"}
+                  <h3 className="text-xl mb-6 flex items-center gap-2" style={{ fontFamily: "Geist", fontWeight: 600 }}>
+                    <Award className="w-5 h-5" /> Vouches Received ({receivedVouches.length})
+                  </h3>
+                  {receivedVouches.length === 0 ? (
+                    <p className="text-center text-gray-400 py-8" style={{ fontFamily: "Geist", fontSize: "14px" }}>
+                      No vouches yet. Complete jobs to build your reputation.
+                    </p>
+                  ) : (
+                    <div className="space-y-4">
+                      {receivedVouches.map((vouch) => (
+                        <div key={vouch.vouchId} className="p-5 bg-gray-50 border border-gray-200 rounded-xl">
+                          <div className="flex items-start gap-3 mb-2">
+                            <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
+                              <span style={{ fontFamily: "Geist", fontWeight: 600, fontSize: "14px" }}>
+                                {vouch.voucherName?.[0] ?? "?"}
+                              </span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p style={{ fontFamily: "Geist", fontWeight: 500, fontSize: "15px" }}>
+                                {vouch.voucherName}
+                              </p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <p className="text-xs text-gray-500" style={{ fontFamily: "Geist" }}>
+                                  {new Date(vouch.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
                                 </p>
-                                <p className="text-xs text-gray-600" style={{ fontFamily: "Geist" }}>
-                                  {vouch.createdAt ? new Date(vouch.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : ""}
-                                </p>
+                                {vouch.skillName && (
+                                  <>
+                                    <span className="text-gray-300">·</span>
+                                    <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 rounded-md" style={{ fontFamily: "Geist" }}>
+                                      {vouch.skillName}
+                                    </span>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>
-                          <p className="text-gray-700 text-sm" style={{ fontFamily: "Geist", lineHeight: "1.6" }}>
-                            {vouch.message}
-                          </p>
+                          {vouch.comment && (
+                            <p className="text-gray-700 text-sm" style={{ fontFamily: "Geist", lineHeight: "1.6", paddingLeft: "52px" }}>
+                              {vouch.comment}
+                            </p>
+                          )}
                         </div>
-                      ))
-                    )}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
               </div>
             )}
 
-            {/* ── Applications ── */}
+            {/* ── Applications tab ── */}
             {activeTab === "applications" && (
               <div className="space-y-4">
                 <h3 className="text-xl mb-4" style={{ fontFamily: "Geist", fontWeight: 600 }}>
                   Jobs You've Applied To ({applications.length})
                 </h3>
-                {applications.map((app) => (
-                  <div key={app.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:border-gray-300 transition-colors">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <Link to={`/jobs/${app.id}`}>
-                          <h4 className="text-lg mb-1 hover:underline" style={{ fontFamily: "Geist", fontWeight: 600 }}>{app.jobTitle}</h4>
-                        </Link>
-                        <p className="text-gray-600 text-sm mb-2" style={{ fontFamily: "Geist" }}>{app.company}</p>
+                {applications.length === 0 ? (
+                  <p className="text-center text-gray-400 py-8" style={{ fontFamily: "Geist", fontSize: "14px" }}>
+                    You haven't applied to any jobs yet.
+                  </p>
+                ) : (
+                  applications.map((app) => (
+                    <div key={app.applicationId} className="bg-white border border-gray-200 rounded-xl p-6 hover:border-gray-300 transition-colors">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <Link to={`/jobs/${app.jobId}`}>
+                            <h4 className="text-lg mb-1 hover:underline" style={{ fontFamily: "Geist", fontWeight: 600 }}>
+                              {app.title}
+                            </h4>
+                          </Link>
+                          <p className="text-gray-600 text-sm mb-1" style={{ fontFamily: "Geist" }}>
+                            Posted by {app.posterName}
+                          </p>
+                          {app.jobStatus && (
+                            <span className={`inline-block px-2 py-0.5 rounded-md text-xs border ${getJobStatusColor(app.jobStatus)}`} style={{ fontFamily: "Geist", fontWeight: 500 }}>
+                              Job: {getJobStatusLabel(app.jobStatus)}
+                            </span>
+                          )}
+                        </div>
+                        <span className={`px-3 py-1 rounded-lg text-xs border ${getAppStatusColor(app.status)}`} style={{ fontFamily: "Geist", fontWeight: 500 }}>
+                          {getAppStatusLabel(app.status)}
+                        </span>
                       </div>
-                      <span className={`px-3 py-1 rounded-lg text-xs border ${getStatusColor(app.status)}`} style={{ fontFamily: "Geist", fontWeight: 500 }}>
-                        {app.status}
-                      </span>
+                      <div className="flex items-center gap-6 text-sm text-gray-600">
+                        {app.budget && (
+                          <div className="flex items-center gap-1.5">
+                            <DollarSign className="w-4 h-4" />
+                            <span style={{ fontFamily: "Geist" }}>{app.budget}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="w-4 h-4" />
+                          <span style={{ fontFamily: "Geist" }}>
+                            Applied {new Date(app.appliedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-6 text-sm text-gray-600">
-                      <div className="flex items-center gap-1.5"><DollarSign className="w-4 h-4" /><span style={{ fontFamily: "Geist" }}>{app.budget}</span></div>
-                      <div className="flex items-center gap-1.5"><Clock className="w-4 h-4" /><span style={{ fontFamily: "Geist" }}>Applied {app.appliedDate}</span></div>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             )}
 
-            {/* ── Posted jobs ── */}
-{activeTab === "posted" && (
-  <div className="space-y-4">
-    <h3 className="text-xl mb-4" style={{ fontFamily: "Geist", fontWeight: 600 }}>
-      Jobs You've Posted ({postedJobs.length})
-    </h3>
-    {postedJobs.length === 0 ? (
-      <p className="text-center text-gray-400 py-8" style={{ fontFamily: "Geist", fontSize: "14px" }}>
-        No jobs posted yet.
-      </p>
-    ) : (
-      postedJobs.map((job: any) => (
-        <div key={job.jobId} className="bg-white border border-gray-200 rounded-xl p-6 hover:border-gray-300 transition-colors">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex-1">
-              <h4 className="text-lg mb-1" style={{ fontFamily: "Geist", fontWeight: 600 }}>{job.title}</h4>
-              <p className="text-gray-600 text-sm" style={{ fontFamily: "Geist" }}>
-                {job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : ""}
-              </p>
-            </div>
-            <span className={`px-3 py-1 rounded-lg text-xs border ${getStatusColor(job.status)}`} style={{ fontFamily: "Geist", fontWeight: 500 }}>
-              {job.status}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6 text-sm text-gray-600">
-              {job.budget && (
-                <div className="flex items-center gap-1.5">
-                  <DollarSign className="w-4 h-4" />
-                  <span style={{ fontFamily: "Geist" }}>{job.budget}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-1.5">
-                <User className="w-4 h-4" />
-                <span style={{ fontFamily: "Geist" }}>{job.applicationCount ?? 0} applicants</span>
+            {/* ── Posted jobs tab ── */}
+            {activeTab === "posted" && (
+              <div className="space-y-4">
+                <h3 className="text-xl mb-4" style={{ fontFamily: "Geist", fontWeight: 600 }}>
+                  Jobs You've Posted ({postedJobs.length})
+                </h3>
+                {postedJobs.length === 0 ? (
+                  <p className="text-center text-gray-400 py-8" style={{ fontFamily: "Geist", fontSize: "14px" }}>
+                    No jobs posted yet.
+                  </p>
+                ) : (
+                  postedJobs.map((job) => (
+                    <div key={job.jobId} className="bg-white border border-gray-200 rounded-xl p-6 hover:border-gray-300 transition-colors">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="text-lg" style={{ fontFamily: "Geist", fontWeight: 600 }}>{job.title}</h4>
+                            {job.urgent && (
+                              <span className="px-2 py-0.5 bg-red-50 text-red-600 border border-red-200 rounded-md text-xs" style={{ fontFamily: "Geist", fontWeight: 500 }}>
+                                Urgent
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-gray-500 text-sm" style={{ fontFamily: "Geist" }}>
+                            {new Date(job.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                          </p>
+                          {job.workerName && (
+                            <p className="text-sm text-gray-600 mt-1" style={{ fontFamily: "Geist" }}>
+                              Worker: {job.workerName}
+                            </p>
+                          )}
+                        </div>
+                        <span className={`px-3 py-1 rounded-lg text-xs border ${getJobStatusColor(job.status)}`} style={{ fontFamily: "Geist", fontWeight: 500 }}>
+                          {getJobStatusLabel(job.status)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-6 text-sm text-gray-600">
+                          {job.budget && (
+                            <div className="flex items-center gap-1.5">
+                              <DollarSign className="w-4 h-4" />
+                              <span style={{ fontFamily: "Geist" }}>{job.budget}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1.5">
+                            <User className="w-4 h-4" />
+                            <span style={{ fontFamily: "Geist" }}>{job.applicantCount} applicant{job.applicantCount !== 1 ? "s" : ""}</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Link
+                            to={`/jobs/${job.jobId}`}
+                            className="px-4 py-2 bg-gray-900 text-white rounded-xl text-sm hover:bg-gray-700 transition-colors"
+                            style={{ fontFamily: "Geist", fontWeight: 500 }}
+                          >
+                            View & Manage →
+                          </Link>
+                          {job.status === "IN_PROGRESS" && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await request(`/jobs/${job.jobId}/complete`, { method: "PATCH" });
+                                  setPostedJobs((prev) =>
+                                    prev.map((j) => j.jobId === job.jobId ? { ...j, status: "COMPLETED" } : j)
+                                  );
+                                } catch (err: any) {
+                                  alert(err.message || "Failed to mark complete.");
+                                }
+                              }}
+                              className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm hover:bg-green-700 transition-colors"
+                              style={{ fontFamily: "Geist", fontWeight: 500 }}
+                            >
+                              Mark Complete
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
-            </div>
-            <div className="flex gap-2">
-  <Link
-    to={`/jobs/${job.jobId}`}
-    className="px-4 py-2 bg-gray-900 text-white rounded-xl text-sm hover:bg-gray-700 transition-colors"
-    style={{ fontFamily: "Geist", fontWeight: 500 }}
-  >
-    View & Manage →
-  </Link>
-  {job.status === 'IN_PROGRESS' && (
-    <button
-      onClick={async () => {
-        try {
-          await request(`/jobs/${job.jobId}/complete`, { method: 'PATCH' });
-          setPostedJobs((prev: any) => prev.map((j: any) =>
-            j.jobId === job.jobId ? { ...j, status: 'COMPLETED' } : j
-          ));
-        } catch (err: any) {
-          alert(err.message);
-        }
-      }}
-      className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm hover:bg-green-700 transition-colors"
-      style={{ fontFamily: "Geist", fontWeight: 500 }}
-    >
-      Mark Complete
-    </button>
-  )}
-</div>
-          </div>
-        </div>
-      ))
-    )}
-  </div>
-)}
+            )}
           </motion.div>
         </div>
       </div>
