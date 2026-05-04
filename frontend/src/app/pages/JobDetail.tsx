@@ -257,12 +257,22 @@ export default function JobDetail() {
               {isCompleted && currentUserId && (isPoster || isWorker) && (
                 <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-8 border border-gray-200 mb-6">
                   <h3
-                    className="text-xl mb-6 flex items-center gap-2"
+                    className="text-xl mb-2 flex items-center gap-2"
                     style={{ fontFamily: "Geist", fontWeight: 600 }}
                   >
                     <Star className="w-5 h-5" />
                     {alreadyReviewed ? "Your Review" : "Leave a Review"}
                   </h3>
+
+                  {/* Context — who are you reviewing */}
+                  {!alreadyReviewed && !reviewSuccess && (
+                    <p className="text-sm text-gray-500 mb-6" style={{ fontFamily: "Geist" }}>
+                      {isPoster
+                        ? <>You're rating <span className="font-medium text-gray-800">{jobData.workerName}</span> as the worker on this job.</>
+                        : <>You're rating <span className="font-medium text-gray-800">{jobData.posterName}</span> as the job poster.</>
+                      }
+                    </p>
+                  )}
 
                   {reviewSuccess ? (
                     <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
@@ -305,7 +315,11 @@ export default function JobDetail() {
                         <textarea
                           value={reviewComment}
                           onChange={(e) => setReviewComment(e.target.value)}
-                          placeholder="Share your experience working on this job..."
+                          placeholder={
+                            isPoster
+                              ? `How was ${jobData.workerName}'s work?`
+                              : `How was it working with ${jobData.posterName}?`
+                          }
                           rows={3}
                           className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gray-300 transition"
                           style={{ fontFamily: "Geist" }}

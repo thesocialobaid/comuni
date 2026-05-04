@@ -8,7 +8,7 @@ import {
 import VideoBackground from "../components/VideoBackground";
 import TopBar from "../components/TopBar";
 import Sidebar from "../components/Sidebar";
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 
 // ─── Types (matched exactly to backend responses) ─────────────────────────────
@@ -41,13 +41,6 @@ interface SkillData {
   proficiencyLevel: "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT";
   relevantComp: number;
   addedAt: string;
-}
-
-// GET /api/skills → { skills: CatalogueSkill[] }
-interface CatalogueSkill {
-  skillId: string;
-  skillName: string;
-  category: string;
 }
 
 // GET /api/applications/mine → { applications: ApplicationData[] }
@@ -293,9 +286,27 @@ function EditProfileModal({
   );
 }
 
+// ─── Hardcoded skill catalogue (frontend only) ────────────────────────────────
+const SKILL_CATALOGUE = [
+  // Development
+  "JavaScript", "TypeScript", "React", "Node.js", "Python", "Java", "C++", "C#",
+  "PHP", "SQL", "MongoDB", "REST APIs", "Git", "Docker", "Linux", "Next.js",
+  "Express.js", "Flutter", "React Native", "Firebase",
+  // Design
+  "UI/UX Design", "Figma", "Adobe Photoshop", "Adobe Illustrator", "Canva",
+  "Motion Graphics", "Logo Design", "Wireframing", "Prototyping",
+  // Data
+  "Data Analysis", "Excel / Sheets", "Power BI", "Tableau", "Pandas", "NumPy",
+  "Data Scraping", "Statistics", "R",
+  // Content
+  "Content Writing", "Copywriting", "SEO", "Social Media", "Video Editing",
+  "Photography", "Urdu Writing", "Translation", "Proofreading",
+  // AI/ML
+  "Machine Learning", "Deep Learning", "TensorFlow", "PyTorch", "NLP",
+  "Computer Vision", "Prompt Engineering", "LangChain",
+];
+
 // ─── Add Skill Modal ──────────────────────────────────────────────────────────
-// Loads real skills from GET /api/skills, then POSTs to /api/students/me/skills
-// Body: { skillId, proficiencyLevel }  (skillId is the DB id, not display name)
 const LEVELS = ["BEGINNER", "INTERMEDIATE", "ADVANCED", "EXPERT"] as const;
 type Level = typeof LEVELS[number];
 
@@ -308,57 +319,56 @@ function AddSkillModal({
   onAdd: (skill: SkillData) => void;
   onClose: () => void;
 }) {
-  const [catalogue, setCatalogue]   = useState<CatalogueSkill[]>([]);
-  const [search, setSearch]         = useState("");
-  const [selected, setSelected]     = useState<CatalogueSkill | null>(null);
+  const [input, setInput]           = useState("");
   const [level, setLevel]           = useState<Level>("INTERMEDIATE");
-  const [dropOpen, setDropOpen]     = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]           = useState<string | null>(null);
-  const dropRef = useRef<HTMLDivElement>(null);
 
-  // Load skill catalogue from backend
-  useEffect(() => {
-    request("/skills")
-      .then((res: any) => setCatalogue(res.skills ?? []))
-      .catch(() => {});
-  }, []);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setDropOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const filtered = catalogue.filter(
-    (s) =>
-      !existingSkillIds.has(s.skillId) &&
-      s.skillName.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const isDuplicate = selected ? existingSkillIds.has(selected.skillId) : false;
+  // Suggestions: catalogue items matching input, not already added
+  const suggestions = input.trim().length === 0
+    ? []
+    : SKILL_CATALOGUE.filter(
+        (s) =>
+          s.toLowerCase().includes(input.toLowerCase()) &&
+          !existingSkillIds.has(s.toLowerCase())
+      ).slice(0, 6);
 
   const handleAdd = async () => {
-    if (!selected || isDuplicate) return;
+    const skillName = input.trim();
+    if (!skillName) return;
     setSubmitting(true);
     setError(null);
     try {
+      // Step 1: create or get the skill from the backend catalogue
+      // POST /api/skills returns 409 if it already exists, so we catch that
+      let skillId: string;
+      try {
+        const created: any = await request("/skills", {
+          method: "POST",
+          body: JSON.stringify({ skillName, category: null }),
+        });
+        skillId = String(created.skill?.skillId ?? created.skillId);
+      } catch (err: any) {
+        // 409 = skill already exists — fetch it by searching
+        const catalogue: any = await request(`/skills?search=${encodeURIComponent(skillName)}`);
+        const match = (catalogue.skills ?? []).find(
+          (s: any) => s.skillName.toLowerCase() === skillName.toLowerCase()
+        );
+        if (!match) throw new Error("Could not find or create this skill.");
+        skillId = String(match.skillId);
+      }
+
+      // Step 2: add to student profile
       await request("/students/me/skills", {
         method: "POST",
-        body: JSON.stringify({
-          skillId: selected.skillId,
-          proficiencyLevel: level,
-        }),
+        body: JSON.stringify({ skillId, proficiencyLevel: level }),
       });
-      // Build a local SkillData to optimistically update UI
+
       onAdd({
-        studentSkillId: Date.now(), // temp id until refetch
-        skillId: selected.skillId,
-        skillName: selected.skillName,
-        category: selected.category,
+        studentSkillId: Date.now(),
+        skillId,
+        skillName,
+        category: "",
         proficiencyLevel: level,
         relevantComp: 0,
         addedAt: new Date().toISOString(),
@@ -386,15 +396,16 @@ function AddSkillModal({
         className="relative w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl p-8 border border-gray-200 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-7">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl" style={{ fontFamily: "Geist", fontWeight: 600 }}>Add a Skill</h2>
           <button onClick={onClose} className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 rounded-xl transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Skill search */}
-        <div className="mb-5" ref={dropRef}>
+        {/* Free-text input */}
+        <div className="mb-2">
           <label className="block mb-2 text-gray-700" style={{ fontFamily: "Geist", fontSize: "13px", fontWeight: 500 }}>
             Skill Name
           </label>
@@ -402,67 +413,46 @@ function AddSkillModal({
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setSelected(null); setDropOpen(true); }}
-              onFocus={() => setDropOpen(true)}
-              placeholder="Search from skill catalogue…"
-              className="w-full pl-11 pr-10 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-gray-400 transition-colors"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && input.trim()) handleAdd(); }}
+              placeholder="e.g. React, Figma, Video Editing…"
+              className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-gray-400 transition-colors"
               style={{ fontFamily: "Geist", fontSize: "15px" }}
+              autoFocus
             />
-            {search && (
-              <button
-                type="button"
-                onClick={() => { setSelected(null); setSearch(""); setDropOpen(false); }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-
-            <AnimatePresence>
-              {dropOpen && filtered.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden"
-                >
-                  <div className="max-h-48 overflow-y-auto">
-                    {filtered.slice(0, 8).map((s) => (
-                      <button
-                        key={s.skillId}
-                        type="button"
-                        onMouseDown={() => { setSelected(s); setSearch(s.skillName); setDropOpen(false); }}
-                        className="w-full text-left px-5 py-3 hover:bg-gray-50 transition-colors flex items-center justify-between"
-                        style={{ fontFamily: "Geist", fontSize: "14px" }}
-                      >
-                        <span>{s.skillName}</span>
-                        <span className="text-xs text-gray-400">{s.category}</span>
-                      </button>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
-
-          {selected ? (
-            <p className="mt-2 text-sm text-green-600" style={{ fontFamily: "Geist" }}>
-              ✓ {selected.skillName} selected
-            </p>
-          ) : (
-            <p className="mt-2 text-xs text-gray-400" style={{ fontFamily: "Geist" }}>
-              Skills must be picked from the catalogue above.
-            </p>
-          )}
         </div>
 
+        {/* Inline suggestions */}
+        {suggestions.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-5">
+            {suggestions.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setInput(s)}
+                className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${
+                  input === s
+                    ? "bg-gray-900 text-white border-gray-900"
+                    : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
+                }`}
+                style={{ fontFamily: "Geist", fontWeight: 500 }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Spacer when no suggestions */}
+        {suggestions.length === 0 && <div className="mb-5" />}
+
         {/* Proficiency level */}
-        <div className="mb-7">
-          <label className="block mb-3 text-gray-700" style={{ fontFamily: "Geist", fontSize: "13px", fontWeight: 500 }}>
+        <div className="mb-6">
+          <p className="text-sm text-gray-600 mb-3" style={{ fontFamily: "Geist", fontWeight: 500 }}>
             Proficiency Level
-          </label>
+          </p>
           <div className="grid grid-cols-2 gap-2">
             {LEVELS.map((l) => (
               <button
@@ -496,9 +486,9 @@ function AddSkillModal({
           </button>
           <button
             onClick={handleAdd}
-            disabled={!selected || isDuplicate || submitting}
+            disabled={!input.trim() || submitting}
             className={`flex-1 py-3 rounded-2xl text-white transition-all flex items-center justify-center gap-2 ${
-              selected && !isDuplicate && !submitting
+              input.trim() && !submitting
                 ? "bg-gradient-to-b from-[#2a2a2a] to-[#1a1a1a] hover:from-[#333] hover:to-[#222]"
                 : "bg-gray-300 cursor-not-allowed"
             }`}
@@ -545,7 +535,7 @@ export default function Profile() {
           s.giverRatingCount  = parseInt(s.giverRatingCount)    || 0;
         }
         setProfile(s);
-        setSkills(skillsRes.skills ?? []);
+        setSkills((skillsRes.skills ?? []).map((s: any) => ({ ...s, skillId: String(s.skillId) })));
         setApplications(appsRes.applications ?? []);
         setPostedJobs(jobsRes.jobs ?? []);
 
@@ -607,7 +597,15 @@ export default function Profile() {
         {showEditProfile && (
           <EditProfileModal
             profile={profile}
-            onSave={(updated) => setProfile((p) => p ? { ...p, ...updated } : p)}
+            onSave={(updated) => setProfile((p) => {
+              if (!p) return p;
+              const merged = { ...p, ...updated };
+              merged.workerRating      = parseFloat(String(merged.workerRating))      || 0;
+              merged.giverRating       = parseFloat(String(merged.giverRating))       || 0;
+              merged.workerRatingCount = parseInt(String(merged.workerRatingCount))   || 0;
+              merged.giverRatingCount  = parseInt(String(merged.giverRatingCount))    || 0;
+              return merged;
+            })}
             onClose={() => setShowEditProfile(false)}
           />
         )}
