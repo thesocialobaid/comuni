@@ -1,94 +1,112 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import {
-  Search,
-  DollarSign,
-  Calendar,
-  AlertCircle,
-  ChevronDown,
-  Loader2,
+  Search, DollarSign, Calendar, AlertCircle,
+  ChevronDown, Loader2, Star, Award,
 } from "lucide-react";
 import VideoBackground from "../components/VideoBackground";
 import TopBar from "../components/TopBar";
 import Sidebar from "../components/Sidebar";
-import { jobsAPI } from "../../api/jobs";
-import { studentsAPI } from "../../api/students";
+import { request } from "../../api/client";
 
-const categories = ["All", "Development", "Design", "Data", "Content", "AI/ML"];
+// Sort options mapped to backend's sortBy values
+// Backend supports: newest | deadline | budget
+const SORT_OPTIONS = [
+  { label: "Newest First",    value: "newest"   },
+  { label: "Highest Budget",  value: "budget"   },
+  { label: "Deadline Soon",   value: "deadline" },
+];
 
 export default function JobFeed() {
   const [activeTab, setActiveTab] = useState<"jobs" | "people">("jobs");
-
-  // Shared search — resets when tab switches
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Jobs state
-  const [jobs, setJobs]                   = useState<any[]>([]);
-  const [jobsLoading, setJobsLoading]     = useState(true);
-  const [jobsError, setJobsError]         = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [sortBy, setSortBy]               = useState("newest");
+  // ── Jobs state ────────────────────────────────────────────────────────────
+  const [jobs, setJobs]           = useState<any[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [sortBy, setSortBy]       = useState("newest");
 
-  // People state
+  // ── People state ──────────────────────────────────────────────────────────
   const [students, setStudents]           = useState<any[]>([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentsLoaded, setStudentsLoaded]   = useState(false);
 
-  // Fetch jobs once
-  useEffect(() => {
-    jobsAPI.getAll()
-      .then((data) => setJobs(data))
-      .catch((err) => setJobsError(err instanceof Error ? err.message : "Failed to load jobs"))
+  // Debounce ref so we don't hit backend on every keystroke
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Fetch jobs from backend with search + sort query params ───────────────
+  const fetchJobs = useCallback((search: string, sort: string) => {
+    setJobsLoading(true);
+    setJobsError(null);
+
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("search", search.trim());
+    if (sort !== "newest") params.set("sortBy", sort);
+
+    const query = params.toString() ? `?${params.toString()}` : "";
+
+    request(`/jobs${query}`)
+      .then((res: any) => setJobs(res.jobs ?? []))
+      .catch((err: any) => setJobsError(err.message || "Failed to load jobs"))
       .finally(() => setJobsLoading(false));
   }, []);
 
-  // Fetch students when People tab is first opened
+  // Initial load
   useEffect(() => {
-    if (activeTab !== "people" || students.length > 0) return;
+    fetchJobs("", "newest");
+  }, []);
+
+  // Re-fetch when sort changes (immediate)
+  const handleSortChange = (newSort: string) => {
+    setSortBy(newSort);
+    fetchJobs(searchQuery, newSort);
+  };
+
+  // Re-fetch when search changes (debounced 400ms)
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+
+    if (activeTab === "jobs") {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        fetchJobs(value, sortBy);
+      }, 400);
+    }
+  };
+
+  // ── Fetch students (backend supports ?search=) ────────────────────────────
+  const fetchStudents = useCallback((search: string) => {
     setStudentsLoading(true);
-    studentsAPI.getAll()
-      .then((data) => setStudents(data))
+    const query = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
+    request(`/students${query}`)
+      .then((res: any) => setStudents(res.students ?? []))
       .catch(() => setStudents([]))
       .finally(() => setStudentsLoading(false));
+  }, []);
+
+  // Load students when People tab first opened
+  useEffect(() => {
+    if (activeTab !== "people" || studentsLoaded) return;
+    setStudentsLoaded(true);
+    fetchStudents("");
   }, [activeTab]);
 
-  // Reset search when switching tabs
+  // Debounced search for people tab
+  const handlePeopleSearch = (value: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchStudents(value);
+    }, 400);
+  };
+
+  // ── Tab switch ────────────────────────────────────────────────────────────
   const handleTabSwitch = (tab: "jobs" | "people") => {
     setActiveTab(tab);
     setSearchQuery("");
+    if (debounceRef.current) clearTimeout(debounceRef.current);
   };
-
-  // Filtered + sorted jobs
-  const filteredJobs = jobs
-    .filter((job) => {
-      const q = searchQuery.toLowerCase();
-      const matchesSearch =
-        q === "" ||
-        job.title?.toLowerCase().includes(q) ||
-        job.description?.toLowerCase().includes(q);
-      const matchesCategory =
-        selectedCategory === "All" ||
-        job.category?.toLowerCase() === selectedCategory.toLowerCase();
-      return matchesSearch && matchesCategory;
-    })
-    .sort((a, b) => {
-      if (sortBy === "budget-high") return (parseFloat(b.budget) || 0) - (parseFloat(a.budget) || 0);
-      if (sortBy === "budget-low")  return (parseFloat(a.budget) || 0) - (parseFloat(b.budget) || 0);
-      if (sortBy === "deadline")    return new Date(a.deadline ?? "").getTime() - new Date(b.deadline ?? "").getTime();
-      // newest first (default)
-      return new Date(b.createdAt ?? "").getTime() - new Date(a.createdAt ?? "").getTime();
-    });
-
-  // Filtered students
-  const filteredStudents = students.filter((s) => {
-    const q = searchQuery.toLowerCase();
-    return (
-      q === "" ||
-      s.name?.toLowerCase().includes(q) ||
-      s.email?.toLowerCase().includes(q) ||
-      s.rollNumber?.toLowerCase().includes(q)
-    );
-  });
 
   return (
     <div className="min-h-screen">
@@ -113,10 +131,10 @@ export default function JobFeed() {
               {activeTab === "jobs"
                 ? jobsLoading
                   ? "Loading opportunities…"
-                  : `${filteredJobs.length} open opportunity${filteredJobs.length !== 1 ? "ies" : "y"} from FAST students`
+                  : `${jobs.length} open opportunit${jobs.length !== 1 ? "ies" : "y"} from FAST students`
                 : studentsLoading
                   ? "Loading students…"
-                  : `${filteredStudents.length} student${filteredStudents.length !== 1 ? "s" : ""} found`
+                  : `${students.length} student${students.length !== 1 ? "s" : ""} found`
               }
             </p>
 
@@ -139,7 +157,7 @@ export default function JobFeed() {
             </div>
           </motion.div>
 
-          {/* ── Single search bar — placeholder changes per tab ── */}
+          {/* ── Search bar ── */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -150,60 +168,45 @@ export default function JobFeed() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                handleSearchChange(e.target.value);
+                if (activeTab === "people") handlePeopleSearch(e.target.value);
+              }}
               placeholder={
                 activeTab === "jobs"
-                  ? "Search jobs by title, skills, or keywords…"
-                  : "Search students by name, email, or roll number…"
+                  ? "Search jobs by title or description…"
+                  : "Search students by name or roll number…"
               }
               className="w-full pl-14 pr-6 py-4 bg-white/80 backdrop-blur-xl border border-gray-200 rounded-2xl outline-none focus:border-gray-400 transition-colors shadow-sm"
               style={{ fontFamily: "Geist", fontSize: "15px" }}
             />
           </motion.div>
 
-          {/* ── Category filters + sort — only on Jobs tab ── */}
+          {/* ── Sort dropdown — only on Jobs tab ── */}
           {activeTab === "jobs" && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.15 }}
-              className="flex items-center justify-between mb-6"
+              className="flex items-center justify-end mb-6"
             >
-              <div className="flex gap-2 flex-wrap">
-                {categories.map((category) => (
-                  <button
-                    key={category}
-                    onClick={() => setSelectedCategory(category)}
-                    className={`px-4 py-2 rounded-xl transition-all ${
-                      selectedCategory === category
-                        ? "bg-gray-900 text-white"
-                        : "bg-white/80 backdrop-blur-xl text-gray-700 hover:bg-gray-100 border border-gray-200"
-                    }`}
-                    style={{ fontFamily: "Geist", fontSize: "14px", fontWeight: 500 }}
-                  >
-                    {category}
-                  </button>
-                ))}
-              </div>
-
               <div className="relative">
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
+                  onChange={(e) => handleSortChange(e.target.value)}
                   className="appearance-none px-4 py-2 pr-10 bg-white/80 backdrop-blur-xl border border-gray-200 rounded-xl outline-none cursor-pointer"
                   style={{ fontFamily: "Geist", fontSize: "14px", fontWeight: 500 }}
                 >
-                  <option value="newest">Newest First</option>
-                  <option value="budget-high">Highest Budget</option>
-                  <option value="budget-low">Lowest Budget</option>
-                  <option value="deadline">Deadline Soon</option>
+                  {SORT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 pointer-events-none" />
               </div>
             </motion.div>
           )}
 
-          {/* ── Jobs tab content ── */}
+          {/* ── Jobs tab ── */}
           {activeTab === "jobs" && (
             <>
               {jobsLoading && (
@@ -219,71 +222,82 @@ export default function JobFeed() {
                 </div>
               )}
 
-              {!jobsLoading && !jobsError && filteredJobs.length === 0 && (
+              {!jobsLoading && !jobsError && jobs.length === 0 && (
                 <div className="text-center py-20 text-gray-500" style={{ fontFamily: "Geist" }}>
                   No jobs found matching your search.
                 </div>
               )}
 
-              {!jobsLoading && !jobsError && (
+              {!jobsLoading && !jobsError && jobs.length > 0 && (
                 <div className="grid gap-4">
-                  {filteredJobs.map((job, index) => (
-                    <motion.div
-                      key={job.jobId}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.4, delay: 0.04 * index }}
-                    >
-                      <Link to={`/jobs/${job.jobId}`}>
-                        <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 hover:border-gray-300 transition-all hover:shadow-lg cursor-pointer">
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                <h3 className="text-xl" style={{ fontFamily: "Geist", fontWeight: 600 }}>
-                                  {job.title}
-                                </h3>
-                                <p className="text-gray-500 text-sm" style={{ fontFamily: "Geist" }}>
-                                  Posted by {job.posterName ?? job.name ?? "Unknown"}
+                  <AnimatePresence>
+                    {jobs.map((job, index) => (
+                      <motion.div
+                        key={job.jobId}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.4, delay: 0.03 * index }}
+                      >
+                        <Link to={`/jobs/${job.jobId}`}>
+                          <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 hover:border-gray-300 transition-all hover:shadow-lg cursor-pointer">
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                  <h3 className="text-xl" style={{ fontFamily: "Geist", fontWeight: 600 }}>
+                                    {job.title}
+                                  </h3>
+                                  {job.urgent && (
+                                    <span
+                                      className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-lg text-xs"
+                                      style={{ fontFamily: "Geist", fontWeight: 500 }}
+                                    >
+                                      <AlertCircle className="w-3 h-3" />
+                                      Urgent
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-gray-500 text-sm mb-2" style={{ fontFamily: "Geist" }}>
+                                  Posted by {job.posterName ?? "Unknown"}
+                                  {job.posterRating > 0 && (
+                                    <span className="ml-2 inline-flex items-center gap-1">
+                                      <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                                      {Number(job.posterRating).toFixed(1)}
+                                    </span>
+                                  )}
                                 </p>
-                                {job.urgent && (
-                                  <span
-                                    className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-lg text-xs"
-                                    style={{ fontFamily: "Geist", fontWeight: 500 }}
-                                  >
-                                    <AlertCircle className="w-3 h-3" />
-                                    Urgent
-                                  </span>
-                                )}
+                                <p className="text-gray-700 text-sm line-clamp-2" style={{ fontFamily: "Geist" }}>
+                                  {job.description}
+                                </p>
                               </div>
-                              <p className="text-gray-700 text-sm line-clamp-2" style={{ fontFamily: "Geist" }}>
-                                {job.description}
-                              </p>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-gray-600 mt-3">
+                              {job.budget && (
+                                <div className="flex items-center gap-1.5">
+                                  <DollarSign className="w-4 h-4" />
+                                  <span style={{ fontFamily: "Geist", fontWeight: 500 }}>{job.budget}</span>
+                                </div>
+                              )}
+                              {job.deadline && (
+                                <div className="flex items-center gap-1.5">
+                                  <Calendar className="w-4 h-4" />
+                                  <span style={{ fontFamily: "Geist" }}>
+                                    Due {new Date(job.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
-                            {job.budget && (
-                              <div className="flex items-center gap-1.5">
-                                <DollarSign className="w-4 h-4" />
-                                <span style={{ fontFamily: "Geist", fontWeight: 500 }}>{job.budget}</span>
-                              </div>
-                            )}
-                            {job.deadline && (
-                              <div className="flex items-center gap-1.5">
-                                <Calendar className="w-4 h-4" />
-                                <span style={{ fontFamily: "Geist" }}>Due {job.deadline}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </Link>
-                    </motion.div>
-                  ))}
+                        </Link>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
                 </div>
               )}
             </>
           )}
 
-          {/* ── People tab content ── */}
+          {/* ── People tab ── */}
           {activeTab === "people" && (
             <>
               {studentsLoading && (
@@ -292,26 +306,39 @@ export default function JobFeed() {
                 </div>
               )}
 
-              {!studentsLoading && filteredStudents.length === 0 && (
+              {!studentsLoading && students.length === 0 && (
                 <p className="text-center text-gray-400 py-20" style={{ fontFamily: "Geist" }}>
                   No students found.
                 </p>
               )}
 
-              {!studentsLoading && filteredStudents.length > 0 && (
+              {!studentsLoading && students.length > 0 && (
                 <div className="grid gap-4">
-                  {filteredStudents.map((student) => (
+                  {students.map((student) => (
                     <Link to={`/students/${student.studentId}`} key={student.studentId}>
                       <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 hover:border-gray-300 transition-all hover:shadow-lg cursor-pointer flex items-center gap-5">
-                        <div className="w-14 h-14 bg-gray-900 rounded-xl flex items-center justify-center flex-shrink-0">
-                          <span className="text-white text-lg" style={{ fontFamily: "Geist", fontWeight: 600 }}>
-                            {student.name?.[0] ?? "?"}
-                          </span>
+                        {/* Avatar */}
+                        <div className="w-14 h-14 bg-gradient-to-b from-[#2a2a2a] to-[#1a1a1a] rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          {student.profilePicture ? (
+                            <img src={student.profilePicture} alt={student.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-white text-lg" style={{ fontFamily: "Geist", fontWeight: 600 }}>
+                              {student.name?.[0] ?? "?"}
+                            </span>
+                          )}
                         </div>
-                        <div className="flex-1">
-                          <h3 className="text-lg mb-0.5" style={{ fontFamily: "Geist", fontWeight: 600 }}>
-                            {student.name}
-                          </h3>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <h3 className="text-lg" style={{ fontFamily: "Geist", fontWeight: 600 }}>
+                              {student.name}
+                            </h3>
+                            {student.verifiedReviewer && (
+                              <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 rounded-md" style={{ fontFamily: "Geist", fontWeight: 500 }}>
+                                Verified
+                              </span>
+                            )}
+                          </div>
                           <p className="text-gray-500 text-sm" style={{ fontFamily: "Geist" }}>
                             {student.rollNumber}
                           </p>
@@ -319,6 +346,29 @@ export default function JobFeed() {
                             <p className="text-gray-400 text-xs mt-1 line-clamp-1" style={{ fontFamily: "Geist" }}>
                               {student.bio}
                             </p>
+                          )}
+                        </div>
+
+                        {/* Stats */}
+                        <div className="flex items-center gap-4 text-sm text-gray-500 flex-shrink-0">
+                          {student.workerRating > 0 && (
+                            <div className="flex items-center gap-1">
+                              <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                              <span style={{ fontFamily: "Geist", fontWeight: 500 }}>
+                                {Number(student.workerRating).toFixed(1)}
+                              </span>
+                            </div>
+                          )}
+                          {student.totalVouchCount > 0 && (
+                            <div className="flex items-center gap-1">
+                              <Award className="w-4 h-4 text-gray-400" />
+                              <span style={{ fontFamily: "Geist" }}>{student.totalVouchCount}</span>
+                            </div>
+                          )}
+                          {student.jobsCompletedCount > 0 && (
+                            <span className="text-xs text-gray-400" style={{ fontFamily: "Geist" }}>
+                              {student.jobsCompletedCount} jobs
+                            </span>
                           )}
                         </div>
                       </div>
