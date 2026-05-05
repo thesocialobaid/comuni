@@ -15,7 +15,7 @@ export default function TopBar() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <Link to="/">
+          <Link to="/jobs">
             <h1 className="text-2xl" style={{ fontFamily: 'Geist', fontWeight: 600 }}>
               comuni
             </h1>
