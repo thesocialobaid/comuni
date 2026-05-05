@@ -75,7 +75,7 @@ export const studentsAPI = {
     });
   },
 
-  getReviews: async (studentId: string): Promise<Review[]> => {
+ getReviews: async (studentId: string): Promise<Review[]> => {
     const res = await request(`/students/${studentId}/reviews`);
     return res.reviews ?? res ?? [];
   },
